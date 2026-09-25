@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 COPY frontend ./frontend
-COPY data/import ./data/import
+RUN mkdir -p data/import
 
 EXPOSE 8000
 # 1 worker = 1 skaner (więcej workerów wysyłałoby zdublowane alerty)
