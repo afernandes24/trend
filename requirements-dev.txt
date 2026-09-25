@@ -1,0 +1,3 @@
+-r requirements.txt
+pytest>=8
+backtesting>=0.3.3   # tylko dla testów: zawiera prawdziwe historyczne dane EURUSD 1H jako fixture
