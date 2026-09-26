@@ -1,4 +1,4 @@
-# Wdrożenie na Railway (działa 24/7, alerty na Telegram)
+# TREND FOLLOWING — wdrożenie na Railway (24/7, alerty na Telegram)
 
 ## 1. Bot Telegram (5 min)
 1. W Telegramie otwórz **@BotFather** → `/newbot` → podaj nazwę → skopiuj **token**.
@@ -38,3 +38,9 @@
 - Kafelki „Brak danych" / „Błąd pobierania danych" z kodem **429** → Yahoo ogranicza zapytania z serwera. Ustaw `SCAN_INTERVAL_SECONDS=120` i spróbuj ponownie.
 - Nie przychodzi Telegram → Alerty: status kanału i przycisk „Wyślij test" pokażą dokładny błąd; dziennik alertów pokazuje, czy setup został pominięty (np. cooldown, score, brak zgodności 4H/1H).
 - Nie ustawiaj więcej niż 1 repliki — każda wysyłałaby te same alerty.
+
+## Aktualizacja aplikacji (nowa wersja kodu)
+1. Rozpakuj nową paczkę.
+2. GitHub → repozytorium → **Add file → Upload files** → przeciągnij **zawartość** folderu (bez `data`) → **Commit changes**.
+   Pliki o tych samych nazwach zostaną nadpisane.
+3. Railway sam zbuduje i uruchomi nową wersję (2–4 min). Ustawienia, sygnały i historia zostają (są na dysku `/data`).

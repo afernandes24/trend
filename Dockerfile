@@ -1,4 +1,4 @@
-# AURA TREND — obraz do wdrożenia (Railway / dowolny serwer z Dockerem)
+# TREND FOLLOWING — obraz do wdrożenia (Railway / dowolny serwer z Dockerem)
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

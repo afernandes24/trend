@@ -1,4 +1,4 @@
-# AURA TREND — analityczny terminal trend following (XTB)
+# TREND FOLLOWING — analityczny terminal (XTB)
 
 Aplikacja webowa do wyszukiwania setupów **trend following** na 10 instrumentach XTB
 (US100, US500, US30, US2000, GER40, UK100, JAP225, GOLD, SILVER, OIL.WTI).
@@ -45,7 +45,7 @@ aura-trend/
 │  └─ api/routes.py            REST API /api/*
 ├─ backend/tests/              32 testy (m.in. brak look-ahead w score i backteście)
 ├─ frontend/                   Frontend: HTML + ES modules, bez kroku budowania
-│  └─ assets/{css,js,vendor}   Aura Dark CSS, widoki, TradingView Lightweight Charts
+│  └─ assets/{css,js,vendor}   czarny motyw (CSS), widoki, TradingView Lightweight Charts
 └─ data/                       baza SQLite + data/import/ na pliki CSV
 ```
 
@@ -111,6 +111,14 @@ z backtestu tego samego instrumentu, interwału i konfiguracji — z liczbą tra
 - `xtb`: `backend/app/market_data/xtb.py` — zaimplementuj `fetch_candles()`. Publiczne xAPI XTB zostało
   wyłączone w 2025 r., więc adapter jest punktem podłączenia pod dowolne źródło z cenami XTB.
 - Nowy instrument: dopisz `Instrument(...)` w `instruments.py` (symbol XTB, wartość punktu, spread, symbole źródła).
+
+## Alerty — co zawierają i kiedy są pomijane
+
+- Entry, SL, TP1–TP3 z odległościami w punktach („SL = cena − 130 pkt”) i **wolumen w lotach** dla Twojego kapitału i ryzyka.
+- Pomijane, gdy: cena odjechała od Entry o więcej niż X R (spóźniony alert), trwają ciche godziny,
+  jest ±N min od ważnej publikacji makro (kalendarz ForexFactory, waluty instrumentu + USD), cooldown.
+- Po alercie: wiadomość z wynikiem (TP/SL) i **podsumowanie tygodnia** w piątek po 23:00.
+- Wszystko ustawiasz w zakładce **Alerty**.
 
 ## Gdzie skonfigurować Telegram / e-mail / SMS
 
