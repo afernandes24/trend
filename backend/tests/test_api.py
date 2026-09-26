@@ -11,12 +11,22 @@ from app.services.analysis import evaluate_outcome
 from .conftest import FixtureProvider
 
 
+class NoEvents:
+    """Kalendarz makro bez sieci (testy)."""
+    def blocking_event(self, *a, **k):
+        return None
+
+    def status(self):
+        return {"ok": True, "error": None, "events_this_week": 0, "upcoming": []}
+
+
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
     from app.database import Database
     db = Database(tmp_path_factory.mktemp("api") / "api.db")
     market = MarketDataService(db, FixtureProvider())
     build_services(app, db, market)
+    app.state.notifier.calendar = NoEvents()
     app.state.autostart = False
     market.refresh_all()
     with TestClient(app) as c:
@@ -170,7 +180,7 @@ def test_evaluate_outcome_conservative():
 
 def test_index_served(client):
     r = client.get("/")
-    assert r.status_code == 200 and "AURA" in r.text
+    assert r.status_code == 200 and "TREND FOLLOWING" in r.text and "AURA" not in r.text
     assert client.get("/assets/vendor/lightweight-charts.standalone.production.js").status_code == 200
 
 

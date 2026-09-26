@@ -215,7 +215,7 @@ def backfill(request: Request, body: BackfillIn):
 @router.get("/settings/alerts")
 def get_alerts(request: Request):
     n = _svc(request).notifier
-    return {"settings": n.get_settings(), "channels": n.channel_status()}
+    return {"settings": n.get_settings(), "channels": n.channel_status(), "calendar": n.calendar.status()}
 
 
 @router.put("/settings/alerts")
@@ -237,6 +237,12 @@ def test_alert(request: Request, body: TestAlertIn):
         return _svc(request).notifier.send_test(body.channel)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/alerts/weekly-summary")
+def weekly_summary_now(request: Request):
+    """Wysyła podsumowanie ostatnich 7 dni od razu (np. do sprawdzenia)."""
+    return _svc(request).notifier.weekly_summary(force=True)
 
 
 @router.get("/alerts/telegram/chats")

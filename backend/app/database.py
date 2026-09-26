@@ -190,6 +190,12 @@ class Database:
                 [symbol, direction]).fetchone()
         return row["t"] if row and row["t"] else None
 
+    def alert_sent_for(self, signal_id: int) -> bool:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT 1 FROM alerts_log WHERE signal_id=? AND status='sent' LIMIT 1", [signal_id]).fetchone()
+        return row is not None
+
     def list_alerts(self, limit: int = 100, since_id: int = 0) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(

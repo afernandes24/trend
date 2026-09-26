@@ -1,4 +1,4 @@
-"""AURA TREND — punkt startowy aplikacji (FastAPI + frontend statyczny).
+"""TREND FOLLOWING — punkt startowy aplikacji (FastAPI + frontend statyczny).
 
 Uruchomienie:  python -m uvicorn app.main:app --app-dir backend --port 8000
 """
@@ -28,7 +28,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 def build_services(app: FastAPI, db: Database | None = None, market: MarketDataService | None = None) -> None:
     app.state.db = db or Database(settings.database_path)
     app.state.market = market or MarketDataService(app.state.db)
-    app.state.notifier = Notifier(app.state.db, settings)
+    app.state.notifier = Notifier(app.state.db, settings, fx=app.state.market.fx_rates)
     app.state.analysis = AnalysisService(app.state.db, app.state.market, app.state.notifier)
     app.state.scheduler = Scheduler(app.state.market, app.state.analysis, settings.scan_interval_seconds,
                                     settings.h1_refresh_seconds)
@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
     await app.state.scheduler.stop()
 
 
-app = FastAPI(title="AURA TREND — analiza trend following (XTB)", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="TREND FOLLOWING — analiza (XTB)", version="1.0.0", lifespan=lifespan)
 app.include_router(router)
 
 
@@ -63,7 +63,7 @@ async def basic_auth(request: Request, call_next):
                 secrets.compare_digest(pwd, settings.auth_password):
             return await call_next(request)
     return Response("Wymagane logowanie", status_code=401,
-                    headers={"WWW-Authenticate": 'Basic realm="AURA TREND", charset="UTF-8"'})
+                    headers={"WWW-Authenticate": 'Basic realm="TREND FOLLOWING", charset="UTF-8"'})
 
 _assets = settings.frontend_dir / "assets"
 app.mount("/assets", StaticFiles(directory=_assets), name="assets")

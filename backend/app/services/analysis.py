@@ -207,6 +207,7 @@ class AnalysisService:
             if time.time() - bar_close <= 2 * tf_minutes(tf) * 60:
                 sig["historical"] = a.get("historical")
                 sig["tp_r"] = p.tp_r
+                sig["current_price"] = a.get("price")     # do filtra spóźnionych alertów
                 self.notifier.dispatch(sig, mtf_ok)
 
     def _build_signal(self, symbol, tf, pr: Prepared, i, direction, p, a=None, source="LIVE") -> dict:
@@ -232,6 +233,11 @@ class AnalysisService:
             if res:
                 self.db.update_signal(sig["id"], **res)
                 n += 1
+                if sig.get("source") == "LIVE":
+                    try:
+                        self.notifier.notify_result(sig, res)
+                    except Exception:  # noqa: BLE001
+                        log.exception("Powiadomienie o wyniku nieudane")
         return n
 
     def backfill(self, days: int = 30, symbols: list[str] | None = None) -> dict:

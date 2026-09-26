@@ -36,6 +36,10 @@ class Scheduler:
                 self._last_h1 = now
             self.analysis.scan_all(dispatch_alerts=True)
             closed = self.analysis.update_outcomes()
+            try:
+                self.analysis.notifier.weekly_summary()
+            except Exception:  # noqa: BLE001
+                log.exception("Podsumowanie tygodnia nieudane")
             self.last_cycle = datetime.now(timezone.utc).isoformat()
             errors = [info["error"] for res in fetched.values() for info in res.values() if not info["ok"]]
             ok_count = sum(1 for res in fetched.values() for info in res.values() if info["ok"])

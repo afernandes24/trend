@@ -1,4 +1,4 @@
-// AURA TREND — router, nawigacja, status i powiadomienia w aplikacji.
+// TREND FOLLOWING — router, nawigacja, status i powiadomienia w aplikacji.
 import { api, ago, esc, store, toast } from './lib.js';
 import * as dashboard from './views/dashboard.js';
 import * as scanner from './views/scanner.js';
