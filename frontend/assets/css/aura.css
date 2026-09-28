@@ -323,7 +323,7 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); }
 
 /* modal */
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 90; padding: 16px; }
-.modal { max-width: 460px; width: 100%; padding: 22px; }
+.modal { max-width: 460px; width: 100%; padding: 22px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; }
 
 /* mobile nav */
 .mobile-nav { display: none; }

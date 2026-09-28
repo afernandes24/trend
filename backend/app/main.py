@@ -30,10 +30,14 @@ def build_services(app: FastAPI, db: Database | None = None, market: MarketDataS
     app.state.db = db or Database(settings.database_path)
     app.state.market = market or MarketDataService(app.state.db)
     app.state.notifier = Notifier(app.state.db, settings, fx=app.state.market.fx_rates)
+    app.state.notifier.source = app.state.market.provider.name
     app.state.analysis = AnalysisService(app.state.db, app.state.market, app.state.notifier)
     app.state.positions = PositionService(app.state.db, app.state.market, app.state.notifier)
+    live = app.state.market.provider.name == "capital"
     app.state.scheduler = Scheduler(app.state.market, app.state.analysis, settings.scan_interval_seconds,
-                                    settings.h1_refresh_seconds)
+                                    settings.h1_refresh_seconds,
+                                    offset_seconds=settings.scan_offset_seconds if settings.scan_offset_seconds >= 0
+                                    else (3 if live else 20))
 
 
 @asynccontextmanager

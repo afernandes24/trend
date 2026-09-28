@@ -47,6 +47,8 @@ class Settings:
     scan_interval_seconds: int = int(os.getenv("SCAN_INTERVAL_SECONDS", "60"))
     # co ile sekund odświeżać świece 1H (trend 1H/4H zmienia się wolno)
     h1_refresh_seconds: int = int(os.getenv("H1_REFRESH_SECONDS", "300"))
+    # sekundy po pełnej minucie, kiedy startuje skan (-1 = automatycznie: 3 s dla danych na żywo, 20 s dla Yahoo)
+    scan_offset_seconds: int = int(os.getenv("SCAN_OFFSET_SECONDS", "-1"))
     scanner_enabled: bool = _bool("SCANNER_ENABLED", True)
     http_timeout: float = float(os.getenv("HTTP_TIMEOUT", "20"))
 

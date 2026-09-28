@@ -33,6 +33,9 @@ def make_provider(name: str) -> MarketDataProvider:
         return CsvProvider()
     if name == "xtb":
         return XtbProvider()
+    if name == "capital":
+        from .capital import CapitalProvider
+        return CapitalProvider()
     raise ValueError(f"Nieznany dostawca danych: {name}")
 
 
@@ -45,6 +48,23 @@ class MarketDataService:
         self._lock = threading.RLock()
         self._fx: dict[str, float] = {}
         self._fx_ts = 0.0
+        self._offsets: dict | None = None
+        self._handle_provider_switch()
+
+    def _handle_provider_switch(self) -> None:
+        """Zmiana źródła danych = inna skala cen. Czyścimy świece i korektę, zamykamy stare otwarte sygnały."""
+        prev = self.db.get_setting("candles_provider") or ("yahoo" if self.db.has_candles() else None)
+        cur = self.provider.name
+        if prev and prev != cur:
+            log.warning("Zmiana źródła danych %s -> %s: czyszczę świece i korektę cen", prev, cur)
+            self.db.delete_all_candles()
+            self.db.set_setting("price_offsets", {})
+            for sig in self.db.open_signals():
+                self.db.update_signal(sig["id"], status="EXPIRED", result="ZMIANA ŹRÓDŁA", result_r=None,
+                                      closed_at=int(time.time()))
+            for p in self.db.list_positions("OPEN"):
+                self.db.update_position(p["id"], ref_price=None)   # zostanie ustawiona od nowa
+        self.db.set_setting("candles_provider", cur)
 
     # ------------------------------------------------------------------ refresh
     def refresh(self, symbol: str, tfs: tuple[str, ...] = ("5M", "1H")) -> dict:
@@ -76,9 +96,71 @@ class MarketDataService:
         return {i.symbol: self.refresh(i.symbol, tfs) for i in INSTRUMENTS}
 
     # ------------------------------------------------------------------ read
-    def get_candles(self, symbol: str, tf: str) -> pd.DataFrame:
+    # ------------------------------------------------------------------ korekta cen do XTB
+    def offsets(self) -> dict:
+        if self._offsets is None:
+            self._offsets = self.db.get_setting("price_offsets", {}) or {}
+        return dict(self._offsets)
+
+    def offset(self, symbol: str) -> float:
+        return float((self.offsets().get(symbol) or {}).get("offset") or 0.0)
+
+    def raw_last(self, symbol: str) -> tuple[float | None, str | None]:
+        """Ostatnia cena ze źródła danych BEZ korekty (i czas świecy)."""
+        for tf in ("5M", "1H"):
+            df = self.get_candles(symbol, tf, raw=True)
+            if not df.empty:
+                return float(df["close"].iloc[-1]), df.index[-1].isoformat()
+        return None, None
+
+    def set_offsets(self, xtb_prices: dict[str, float | None]) -> dict[str, float]:
+        """Ustawia korektę = cena w XTB − cena ze źródła. None = usuń korektę.
+
+        Zwraca zmianę korekty (delta) dla każdego instrumentu — do przesunięcia otwartych sygnałów/pozycji.
+        """
+        cur = self.offsets()
+        deltas: dict[str, float] = {}
+        for symbol, xtb in xtb_prices.items():
+            inst = get_instrument(symbol)
+            old = float((cur.get(inst.symbol) or {}).get("offset") or 0.0)
+            if xtb in (None, ""):
+                cur.pop(inst.symbol, None)
+                new = 0.0
+            else:
+                raw, raw_time = self.raw_last(inst.symbol)
+                if raw is None:
+                    raise ValueError(f"{inst.symbol}: brak danych ze źródła — nie można policzyć korekty")
+                new = round(float(xtb) - raw, 6)
+                cur[inst.symbol] = {"offset": new, "xtb_price": float(xtb), "src_price": raw,
+                                    "src_time": raw_time, "ts": int(time.time())}
+            if abs(new - old) > 1e-12:
+                deltas[inst.symbol] = new - old
+        self.db.set_setting("price_offsets", cur)
+        with self._lock:
+            self._offsets = cur
+            self._cache.clear()
+        return deltas
+
+    def get_candles(self, symbol: str, tf: str, raw: bool = False) -> pd.DataFrame:
+        """Świece danego interwału. Domyślnie z korektą do XTB (raw=True — surowe dane źródła)."""
         get_instrument(symbol)
         tf_minutes(tf)
+        if not raw:
+            off = self.offset(symbol)
+            if off:
+                key = (symbol, tf, "adj")
+                with self._lock:
+                    hit = self._cache.get(key)
+                    if hit and time.time() - hit[0] < 30:
+                        return hit[1]
+                base_df = self.get_candles(symbol, tf, raw=True)
+                df = base_df.copy()
+                if not df.empty:
+                    df[["open", "high", "low", "close"]] = df[["open", "high", "low", "close"]] + off
+                df.attrs = dict(base_df.attrs)
+                with self._lock:
+                    self._cache[key] = (time.time(), df)
+                return df
         key = (symbol, tf)
         with self._lock:
             hit = self._cache.get(key)

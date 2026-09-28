@@ -215,6 +215,43 @@ def backfill(request: Request, body: BackfillIn):
     return {"inserted": _svc(request).analysis.backfill(max(1, min(body.days, 730)))}
 
 
+# ---------------------------------------------------------------- korekta cen do XTB
+def _is_cash(m, symbol: str) -> bool:
+    """Indeks kasowy (notowany tylko w sesji giełdowej) — korektę robimy wtedy w godzinach sesji."""
+    src = getattr(m.provider, "source_symbol", lambda s: None)(symbol)
+    return src.startswith("^") if src else symbol in ("GER40", "UK100")
+
+
+@router.get("/prices/offsets")
+def price_offsets(request: Request):
+    m = _svc(request).market
+    offs = m.offsets()
+    rows = []
+    for inst in INSTRUMENTS:
+        raw, raw_time = m.raw_last(inst.symbol)
+        o = offs.get(inst.symbol) or {}
+        off = float(o.get("offset") or 0.0)
+        rows.append({"symbol": inst.symbol, "name": inst.name, "digits": inst.digits,
+                     "cash_index": _is_cash(m, inst.symbol),
+                     "src_price": raw, "src_time": raw_time, "offset": off if o else None,
+                     "adjusted": (raw + off) if raw is not None else None,
+                     "calibrated_at": o.get("ts"), "xtb_price": o.get("xtb_price")})
+    return {"items": rows}
+
+
+@router.put("/prices/offsets")
+def set_price_offsets(request: Request, body: dict):
+    s = _svc(request)
+    try:
+        deltas = s.market.set_offsets({k: (None if v in (None, "") else float(v)) for k, v in body.items()})
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(400, str(exc)) from exc
+    s.analysis.apply_offset_change(deltas)
+    s.positions.apply_offset_change(deltas)
+    s.analysis.scan_all(dispatch_alerts=False)
+    return {"changed": deltas, **price_offsets(request)}
+
+
 # ---------------------------------------------------------------- positions (Moje pozycje)
 def _pos(request: Request):
     return _svc(request).positions

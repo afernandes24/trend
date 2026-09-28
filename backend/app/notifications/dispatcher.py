@@ -98,6 +98,7 @@ class Notifier:
         self.telegram = TelegramChannel(settings)
         self.fx = fx or (lambda: {"rates": {}})
         self.app_url = (settings.app_url or "").rstrip("/")
+        self.source = "yahoo"          # ustawiane w main.build_services
         self.calendar = calendar or EconomicCalendar()
 
     # ------------------------------------------------------------ settings
@@ -178,7 +179,14 @@ class Notifier:
         if hist and hist.get("trades"):
             lines += [f"Historical win rate: {hist['win_rate']}% (based on {hist['trades']} trades, "
                       f"{hist['from'][:10]} – {hist['to'][:10]}, backtest)"]
-        lines += ["", "Ceny z Yahoo — w XTB mogą się różnić. Score ≠ prawdopodobieństwo zysku."]
+        corr = (self.db.get_setting("price_offsets", {}) or {}).get(sig["symbol"])
+        if corr:
+            when = datetime.fromtimestamp(corr["ts"], tz=timezone.utc).astimezone(LOCAL_TZ).strftime("%d.%m")
+            lines += ["", f"Ceny skorygowane do XTB (korekta {corr['offset']:+.{d}f} z {when}). Score ≠ prawdopodobieństwo zysku."]
+        elif self.source == "capital":
+            lines += ["", "Ceny CFD na żywo (Capital.com) — w XTB mogą różnić się o kilka pkt. Score ≠ prawdopodobieństwo zysku."]
+        else:
+            lines += ["", "Ceny z Yahoo — w XTB mogą się różnić. Score ≠ prawdopodobieństwo zysku."]
         subject = f"🚨 {sig['symbol']} {sig['direction']} — score {sig['score']}/100 ({sig['tf']})"
         return subject, "\n".join(lines)
 

@@ -109,6 +109,16 @@ class Database:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def delete_all_candles(self) -> int:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM candles")
+            self._conn.commit()
+            return cur.rowcount
+
+    def has_candles(self) -> bool:
+        with self._lock:
+            return self._conn.execute("SELECT 1 FROM candles LIMIT 1").fetchone() is not None
+
     # ------------------------------------------------------------------ signals
     def insert_signal(self, sig: dict) -> int | None:
         cols = ["created_at", "symbol", "tf", "direction", "bar_ts", "entry", "sl", "tp1", "tp2", "tp3",

@@ -223,6 +223,21 @@ class AnalysisService:
             "source": source,
         }
 
+    # ------------------------------------------------------------ korekta cen
+    def apply_offset_change(self, deltas: dict[str, float]) -> None:
+        """Po zmianie korekty przesuwa OTWARTE sygnały, żeby ich wynik liczył się w tej samej skali cen."""
+        if not deltas:
+            return
+        for sig in self.db.open_signals():
+            d = deltas.get(sig["symbol"])
+            if d:
+                self.db.update_signal(sig["id"], **{k: sig[k] + d for k in ("entry", "sl", "tp1", "tp2", "tp3")
+                                                    if sig.get(k) is not None})
+        with self._lock:
+            self._prep_cache.clear()
+            self._hist_cache.clear()
+            self.latest.clear()
+
     # ------------------------------------------------------------ outcomes
     def update_outcomes(self) -> int:
         p = self.get_params()

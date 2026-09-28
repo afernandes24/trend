@@ -112,6 +112,21 @@ z backtestu tego samego instrumentu, interwału i konfiguracji — z liczbą tra
   wyłączone w 2025 r., więc adapter jest punktem podłączenia pod dowolne źródło z cenami XTB.
 - Nowy instrument: dopisz `Instrument(...)` w `instruments.py` (symbol XTB, wartość punktu, spread, symbole źródła).
 
+## Dane na żywo: Capital.com (zalecane)
+
+`MARKET_DATA_PROVIDER=capital` + `CAPITAL_API_KEY`, `CAPITAL_IDENTIFIER`, `CAPITAL_API_PASSWORD`, `CAPITAL_ENV=demo|live`.
+Klucz: capital.com → Ustawienia → API integrations → Generate new key (wymaga 2FA). Ceny CFD (BID) na żywo,
+skan 3 s po pełnej minucie → alert kilka sekund po zamknięciu świecy 15M. Instrumenty dopasowują się same
+(podgląd: tryb zaawansowany → Ustawienia → Dane rynkowe); ręcznie: `CAPITAL_EPICS=US2000=RTY;JAP225=J225`.
+Przy zmianie źródła danych aplikacja czyści stare świece i korektę cen oraz zamyka otwarte sygnały (inna skala cen).
+
+## Korekta cen do XTB
+
+Yahoo podaje ceny futures / indeksów, które różnią się od CFD w XTB (np. złoto: futures grudniowe ≈ 30–45 $ drożej niż spot).
+Rynek → **Korekta cen do XTB** → wpisz aktualną cenę z xStation. Aplikacja przesuwa o różnicę wszystkie ceny
+(wykres, Entry/SL/TP w alertach, otwarte sygnały i pozycje). Wskaźniki i score się nie zmieniają.
+Odświeżaj raz w tygodniu (różnica powoli maleje, przy zmianie kontraktu futures skacze). GER40/UK100 kalibruj w godzinach sesji.
+
 ## Moje pozycje (licznik zysków i strat)
 
 - Gdy wejdziesz w pozycję z alertu: **„Wszedłem w pozycję”** (kafelek na Rynku, wykres, Sygnały albo link w wiadomości Telegram).

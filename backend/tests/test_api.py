@@ -256,3 +256,17 @@ def test_positions_api(client):
     if sigs:
         pf = client.get(f"/api/positions/prefill?signal={sigs[0]['id']}").json()
         assert pf["symbol"] == sigs[0]["symbol"]
+
+
+def test_price_offsets_api(client):
+    items = client.get("/api/prices/offsets").json()["items"]
+    gold = next(i for i in items if i["symbol"] == "GOLD")
+    assert gold["offset"] is None and gold["src_price"]
+    r = client.put("/api/prices/offsets", json={"GOLD": gold["src_price"] - 39})
+    assert r.status_code == 200 and r.json()["changed"]["GOLD"] == pytest.approx(-39)
+    g2 = next(i for i in r.json()["items"] if i["symbol"] == "GOLD")
+    assert g2["offset"] == pytest.approx(-39) and g2["adjusted"] == pytest.approx(gold["src_price"] - 39)
+    ov = next(t for t in client.get("/api/overview").json()["items"] if t["symbol"] == "GOLD")
+    assert ov["price"] == pytest.approx(gold["src_price"] - 39)
+    assert client.put("/api/prices/offsets", json={"GOLD": None}).json()["changed"]["GOLD"] == pytest.approx(39)
+    assert client.put("/api/prices/offsets", json={"XXX": 1}).status_code == 400

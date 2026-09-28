@@ -14,7 +14,8 @@ log = logging.getLogger(__name__)
 
 class Scheduler:
     def __init__(self, market: MarketDataService, analysis: AnalysisService, interval: int,
-                 h1_interval: int = 300):
+                 h1_interval: int = 300, offset_seconds: int = 20):
+        self.offset = max(0, offset_seconds)
         self.market = market
         self.analysis = analysis
         self.interval = max(30, interval)
@@ -56,11 +57,11 @@ class Scheduler:
             self.analysis.scan_running = False
 
     async def _loop(self) -> None:
-        # cykle wyrównane do pełnych minut + 20 s (dostawca zdąży domknąć świecę 5M)
+        # cykle wyrównane do pełnych minut + offset (Yahoo: 20 s, dane na żywo: 3 s)
         while True:
             await asyncio.to_thread(self.cycle)
             now = time.time()
-            nxt = (now // self.interval + 1) * self.interval + 20
+            nxt = (now // self.interval + 1) * self.interval + self.offset
             await asyncio.sleep(max(5.0, nxt - now))
 
     def start(self) -> None:

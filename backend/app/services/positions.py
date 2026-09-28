@@ -137,6 +137,13 @@ class PositionService:
         self.db.update_position(pos_id, status="OPEN", exit_price=None, closed_at=None, pnl_pln=None, pnl_manual=0)
         return self.enrich(self.db.get_position(pos_id))
 
+    def apply_offset_change(self, deltas: dict[str, float]) -> None:
+        """Cena odniesienia otwartych pozycji musi przesunąć się razem z korektą (inaczej fałszywy zysk/strata)."""
+        for p in self.db.list_positions("OPEN"):
+            d = deltas.get(p["symbol"])
+            if d and p["ref_price"] is not None:
+                self.db.update_position(p["id"], ref_price=p["ref_price"] + d)
+
     def delete(self, pos_id: int) -> bool:
         return self.db.delete_position(pos_id)
 
@@ -150,6 +157,10 @@ class PositionService:
         out["rr"] = round(abs(p["tp"] - p["entry"]) / abs(p["entry"] - p["sl"]), 2) if p["sl"] and p["tp"] else None
         if p["status"] == "OPEN":
             now = self._last_price(p["symbol"])
+            if now is not None and p["ref_price"] is None:
+                # np. po zmianie źródła danych — ustawiamy punkt odniesienia od teraz
+                self.db.update_position(p["id"], ref_price=now)
+                p = {**p, "ref_price": now}
             if now is not None and p["ref_price"]:
                 est = p["entry"] + (now - p["ref_price"])
                 out["est_price"] = est
