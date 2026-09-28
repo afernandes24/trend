@@ -112,6 +112,14 @@ z backtestu tego samego instrumentu, interwału i konfiguracji — z liczbą tra
   wyłączone w 2025 r., więc adapter jest punktem podłączenia pod dowolne źródło z cenami XTB.
 - Nowy instrument: dopisz `Instrument(...)` w `instruments.py` (symbol XTB, wartość punktu, spread, symbole źródła).
 
+## Moje pozycje (licznik zysków i strat)
+
+- Gdy wejdziesz w pozycję z alertu: **„Wszedłem w pozycję”** (kafelek na Rynku, wykres, Sygnały albo link w wiadomości Telegram).
+- Wpisujesz cenę wejścia z XTB i wolumen — SL/TP uzupełniają się z odległości z alertu, wolumen z ustawień ryzyka.
+- Otwarte pozycje: szacowany wynik na bieżąco (zmiana ceny od zapisu, więc różnica Yahoo/XTB się znosi).
+- Zamknięcie: cena zamknięcia albo dokładny wynik w PLN z XTB. Licznik: łącznie / miesiąc / tydzień / dziś, % na plus.
+- Tryb prosty (domyślny) pokazuje tylko najważniejsze; szczegóły: przełącznik **Tryb zaawansowany**.
+
 ## Alerty — co zawierają i kiedy są pomijane
 
 - Entry, SL, TP1–TP3 z odległościami w punktach („SL = cena − 130 pkt”) i **wolumen w lotach** dla Twojego kapitału i ryzyka.
