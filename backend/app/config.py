@@ -57,6 +57,9 @@ class Settings:
     smtp_password: str = os.getenv("SMTP_PASSWORD", "")
     smtp_use_tls: bool = _bool("SMTP_USE_TLS", True)
     smtp_use_ssl: bool = _bool("SMTP_USE_SSL", False)
+    # Publiczny adres aplikacji (do linków w alertach). Na Railway ustawiany automatycznie.
+    app_url: str = os.getenv("APP_URL") or (f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}"
+                                             if os.getenv("RAILWAY_PUBLIC_DOMAIN") else "")
     email_from: str = os.getenv("ALERT_EMAIL_FROM", "")
     email_to: list[str] = field(default_factory=lambda: _list("ALERT_EMAIL_TO"))
 

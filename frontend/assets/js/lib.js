@@ -95,6 +95,7 @@ export function sigBadge(sig, lg = false) {
   const s = sig || 'WAIT';
   return `<span class="badge ${s} ${lg ? 'lg' : ''}">${s}</span>`;
 }
+export const isPro = () => store.get('pro', false);
 export const qs = () => Object.fromEntries(new URLSearchParams(location.hash.split('?')[1] || ''));
 
 // Zapamiętywanie drobnych preferencji widza (bez gwarancji — przeglądarka może to czyścić)

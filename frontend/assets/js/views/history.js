@@ -1,5 +1,5 @@
 // HISTORIA SYGNAŁÓW — tabela z filtrami.
-import { api, esc, fmt, fmtR, fmtTime, signCls, store, toast } from '../lib.js';
+import { api, esc, fmt, fmtR, fmtTime, isPro, signCls, store, toast } from '../lib.js';
 
 export async function render(root, ctx) {
   const insts = await api('/instruments');
@@ -8,16 +8,16 @@ export async function render(root, ctx) {
   root.innerHTML = `
   <div class="panel">
     <div class="panel-head"><h3>Filtry</h3>
-      <div class="row"><select id="h-days" style="width:auto"><option value="7">7 dni</option><option value="30" selected>30 dni</option><option value="60">60 dni</option><option value="365">365 dni</option></select>
-      <button class="btn sm" id="h-backfill" title="Wylicza sygnały strategii z danych historycznych i ich wyniki">Wygeneruj historię z danych</button></div></div>
+      <div class="row"><select id="h-days" class="pro-only" style="width:auto"><option value="7">7 dni</option><option value="30" selected>30 dni</option><option value="60">60 dni</option><option value="365">365 dni</option></select>
+      <button class="btn sm pro-only" id="h-backfill" title="Wylicza sygnały strategii z danych historycznych i ich wyniki">Wygeneruj historię z danych</button></div></div>
     <div class="panel-pad"><div class="form-grid">
       <div class="field"><label>Instrument</label><select id="h-sym"><option value="">Wszystkie</option>${insts.map((i) => `<option ${f.symbol === i.symbol ? 'selected' : ''}>${esc(i.symbol)}</option>`).join('')}</select></div>
       <div class="field"><label>Kierunek</label><select id="h-dir"><option value="">LONG + SHORT</option><option ${f.direction === 'LONG' ? 'selected' : ''}>LONG</option><option ${f.direction === 'SHORT' ? 'selected' : ''}>SHORT</option></select></div>
-      <div class="field"><label>Min. score</label><select id="h-score"><option value="">Dowolny</option>${[65, 75, 80, 85].map((s) => `<option value="${s}" ${+f.min_score === s ? 'selected' : ''}>${s}+</option>`).join('')}</select></div>
+      <div class="field pro-only"><label>Min. score</label><select id="h-score"><option value="">Dowolny</option>${[65, 75, 80, 85].map((s) => `<option value="${s}" ${+f.min_score === s ? 'selected' : ''}>${s}+</option>`).join('')}</select></div>
       <div class="field"><label>Wynik</label><select id="h-res"><option value="">Wszystkie</option>${[['WIN', 'Zysk'], ['LOSS', 'Strata'], ['OPEN', 'Otwarte'], ['SL', 'SL'], ['TP1', 'TP1'], ['TP2', 'TP2'], ['TP3', 'TP3'], ['EXPIRED', 'Wygasłe']].map(([v, l]) => `<option value="${v}" ${f.result === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-      <div class="field"><label>Od</label><input id="h-from" type="date" value="${f.date_from || ''}"></div>
-      <div class="field"><label>Do</label><input id="h-to" type="date" value="${f.date_to || ''}"></div>
-      <div class="field"><label>Źródło</label><select id="h-src"><option value="">Wszystkie</option><option value="LIVE" ${f.source === 'LIVE' ? 'selected' : ''}>Na żywo (skaner)</option><option value="BACKFILL" ${f.source === 'BACKFILL' ? 'selected' : ''}>Z danych historycznych</option></select></div>
+      <div class="field pro-only"><label>Od</label><input id="h-from" type="date" value="${f.date_from || ''}"></div>
+      <div class="field pro-only"><label>Do</label><input id="h-to" type="date" value="${f.date_to || ''}"></div>
+      <div class="field pro-only"><label>Źródło</label><select id="h-src"><option value="">Wszystkie</option><option value="LIVE" ${f.source === 'LIVE' ? 'selected' : ''}>Na żywo (skaner)</option><option value="BACKFILL" ${f.source === 'BACKFILL' ? 'selected' : ''}>Z danych historycznych</option></select></div>
     </div></div>
   </div>
   <div class="kpis" id="h-sum" style="margin-top:16px"></div>
@@ -50,21 +50,25 @@ export async function render(root, ctx) {
       const cls = r.result_r > 0 ? 'LONG' : r.result_r < 0 ? 'SHORT' : '';
       return `<span class="badge ${cls}">${esc(r.result)} ${fmtR(r.result_r, 1)}</span>`;
     };
-    $('#h-body').innerHTML = `<table class="t cards"><thead><tr><th>Data</th><th>Instrument</th><th>Kierunek</th><th class="r">Entry</th><th class="r">SL</th><th class="r">TP1 / TP2 / TP3</th><th class="r">Score</th><th>Wynik</th><th>Źródło</th></tr></thead><tbody>
+    const pro = isPro();
+    $('#h-body').innerHTML = `<table class="t cards"><thead><tr><th>Data</th><th>Instrument</th><th>Kierunek</th><th class="r">Entry</th>
+      ${pro ? '<th class="r">SL</th><th class="r">TP1 / TP2 / TP3</th>' : ''}<th class="r">Score</th><th>Wynik</th>${pro ? '<th>Źródło</th>' : ''}<th></th></tr></thead><tbody>
       ${data.items.map((r) => {
         const d = digits[r.symbol] ?? 2;
+        const canEnter = r.status === 'OPEN' && r.source === 'LIVE';
         return `<tr class="click" data-sym="${esc(r.symbol)}">
         <td data-l="Data" class="mono">${fmtTime(r.bar_ts)}</td>
         <td data-l="Instrument"><b>${esc(r.symbol)}</b> <span class="dim">${esc(r.tf)}</span></td>
         <td data-l="Kierunek" class="${r.direction === 'LONG' ? 'long' : 'short'}">${r.direction}</td>
         <td data-l="Entry" class="r mono">${fmt(r.entry, d)}</td>
-        <td data-l="SL" class="r mono short">${fmt(r.sl, d)}</td>
-        <td data-l="TP" class="r mono">${fmt(r.tp1, d)} / ${fmt(r.tp2, d)} / ${fmt(r.tp3, d)}</td>
+        ${pro ? `<td data-l="SL" class="r mono short">${fmt(r.sl, d)}</td>
+        <td data-l="TP" class="r mono">${fmt(r.tp1, d)} / ${fmt(r.tp2, d)} / ${fmt(r.tp3, d)}</td>` : ''}
         <td data-l="Score" class="r mono">${r.score}</td>
         <td data-l="Wynik">${res(r)}</td>
-        <td data-l="Źródło" class="muted">${r.source === 'LIVE' ? 'skaner' : 'historia'}</td></tr>`;
+        ${pro ? `<td data-l="Źródło" class="muted">${r.source === 'LIVE' ? 'skaner' : 'historia'}</td>` : ''}
+        <td data-l="" class="r">${canEnter ? `<a class="btn sm" data-enter href="#/positions?signal=${r.id}">Wszedłem</a>` : ''}</td></tr>`;
       }).join('')}</tbody></table>`;
-    root.querySelectorAll('tr.click').forEach((tr) => { tr.onclick = () => { location.hash = `#/analysis/${encodeURIComponent(tr.dataset.sym)}?tf=15M`; }; });
+    root.querySelectorAll('tr.click').forEach((tr) => { tr.onclick = (e) => { if (e.target.closest('[data-enter]')) return; location.hash = `#/analysis/${encodeURIComponent(tr.dataset.sym)}?tf=15M`; }; });
   }
   root.querySelectorAll('.form-grid select, .form-grid input').forEach((el) => el.addEventListener('change', load));
   $('#h-backfill').onclick = async (e) => {

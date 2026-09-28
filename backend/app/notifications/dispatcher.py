@@ -97,6 +97,7 @@ class Notifier:
         self.sms = SmsChannel(settings)
         self.telegram = TelegramChannel(settings)
         self.fx = fx or (lambda: {"rates": {}})
+        self.app_url = (settings.app_url or "").rstrip("/")
         self.calendar = calendar or EconomicCalendar()
 
     # ------------------------------------------------------------ settings
@@ -170,6 +171,8 @@ class Notifier:
                 lines += [f"💰 Wolumen: {lots} lota → ryzyko ok. {risk_pln} PLN ({pct}% z {cap_pln} PLN)"]
                 if ps["below_min"]:
                     lines += ["⚠️ Nawet minimalny lot przekracza Twoje ryzyko — rozważ pominięcie."]
+        if self.app_url and sig.get("id"):
+            lines += ["", f"➕ Wszedłeś w pozycję? Zapisz ją: {self.app_url}/#/positions?signal={sig['id']}"]
         lines += ["", "Powody: " + (" + ".join(reasons) if reasons else "—")]
         hist = sig.get("historical")
         if hist and hist.get("trades"):
@@ -297,7 +300,8 @@ class Notifier:
         since = int((now_l - timedelta(days=7)).timestamp())
         sigs = [s for s in self.db.list_signals(source="LIVE", date_from=since, limit=5000)
                 if self.db.alert_sent_for(s["id"])]
-        if not sigs and not force:
+        if not sigs and not force and not any((p["closed_at"] or 0) >= since
+                                              for p in self.db.list_positions("CLOSED")):
             self.db.set_setting("weekly_summary_sent", week)
             return None
         closed = [s for s in sigs if s["status"] != "OPEN" and s["result_r"] is not None]
@@ -313,7 +317,13 @@ class Notifier:
             lines += [f"Win rate: {len(wins) / len(closed) * 100:.0f}%",
                       f"Wynik: {total:+.2f}R  (przy 1% ryzyka ≈ {total:+.1f}% konta)"]
             lines += ["", "Instrumenty:"] + [f"• {sym}: {r:+.2f}R" for sym, r in best]
-        lines += ["", "Wyniki liczone od cen z alertów (Yahoo), bez spreadu."]
+        pos = [p for p in self.db.list_positions("CLOSED") if (p["closed_at"] or 0) >= since]
+        if pos:
+            pnl = sum(p["pnl_pln"] or 0 for p in pos)
+            won = sum(1 for p in pos if (p["pnl_pln"] or 0) > 0)
+            lines += ["", f"💼 Twoje pozycje: {len(pos)} zamkniętych, {won} na plusie",
+                      f"Wynik: {pnl:+,.2f} PLN".replace(",", " ")]
+        lines += ["", "Wyniki alertów liczone od cen z alertów (Yahoo), bez spreadu."]
         text = "\n".join(lines)
         sent = self.send_info(f"📊 {APP_NAME} — podsumowanie tygodnia {week}", text)
         self.db.set_setting("weekly_summary_sent", week)

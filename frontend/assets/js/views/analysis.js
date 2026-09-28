@@ -33,10 +33,10 @@ export async function render(root, ctx) {
             <span data-k="sr"><i style="background:rgba(160,170,195,.6)"></i>Wsparcie / opór</span>
           </div>
           <div class="chart-main" id="c-main"><div class="skeleton" style="height:100%;border-radius:0"></div></div>
-          <div class="sub-label">RSI</div><div class="chart-sub" id="c-rsi"></div>
-          <div class="sub-label">MACD</div><div class="chart-sub" id="c-macd"></div>
+          <div class="pro-only"><div class="sub-label">RSI</div><div class="chart-sub" id="c-rsi"></div>
+          <div class="sub-label">MACD</div><div class="chart-sub" id="c-macd"></div></div>
         </div>
-        <div class="panel" id="mtf-panel"></div>
+        <div class="panel pro-only" id="mtf-panel"></div>
       </div>
       <div class="stack" id="side"><div class="panel skeleton" style="height:520px"></div></div>
     </div>
@@ -84,7 +84,8 @@ export async function render(root, ctx) {
   }
 
   root.querySelector('#mtf-panel').innerHTML = mtfPanel(a);
-  root.querySelector('#side').innerHTML = signalCard(a, tf, tfA) + historyBox(a) + indicatorsBox(tfA, a.digits);
+  root.querySelector('#side').innerHTML = signalCard(a, tf, tfA)
+    + `<div class="pro-only">${historyBox(a)}</div><div class="pro-only">${indicatorsBox(tfA, a.digits)}</div>`;
 
   const btn = root.querySelector('#btn-analiza');
   if (btn) {
@@ -143,14 +144,17 @@ function signalCard(a, tf, t) {
       <span class="lk"><i style="background:var(--long)"></i>Take Profit 2 <span class="dim">(${lv.tp_r?.[1]}R)</span></span><span class="lv">${fmt(lv.tp2, d)}</span>
       <span class="lk"><i style="background:var(--long)"></i>Take Profit 3 <span class="dim">(${lv.tp_r?.[2]}R)</span></span><span class="lv">${fmt(lv.tp3, d)}</span>
       <span class="lk">Risk/Reward</span><span class="lv">${rr}</span>
-      <span class="lk">Ryzyko (odl. SL)</span><span class="lv">${fmt(lv.risk, d)} <span class="dim">· ${fmt(lv.risk_atr, 2)}×ATR</span></span>
+      <span class="lk">Odległość SL</span><span class="lv">${fmt(lv.risk, d)} pkt</span>
     </div>
-    <div class="dim" style="font-size:11.5px">SL: ${esc(lv.sl_method || '')}. Entry = zamknięcie świecy ${fmtTime(t.bar_time)}.</div>
-    <div class="section-title" style="margin:16px 0 4px">Powody wejścia · score</div>
-    <ul class="reasons">${reasons}</ul>
+    <div class="pro-only">
+      <div class="dim" style="font-size:11.5px">SL: ${esc(lv.sl_method || '')}. Entry = zamknięcie świecy ${fmtTime(t.bar_time)}.</div>
+      <div class="section-title" style="margin:16px 0 4px">Powody wejścia · score</div>
+      <ul class="reasons">${reasons}</ul>
+    </div>
     ${warnings.map((w) => `<div class="warnbox">${esc(w)}</div>`).join('')}
-    <button class="btn analysis" id="btn-analiza" style="width:100%;margin-top:16px">ANALIZA</button>
-    <div class="dim" style="font-size:11px;margin-top:8px;text-align:center">Otwiera kalkulator pozycji. Aplikacja nie otwiera pozycji na rachunku.</div>
+    ${sig !== 'WAIT' ? `<a class="btn primary" style="width:100%;margin-top:16px" href="#/positions?${new URLSearchParams({ symbol: a.symbol, dir: sig, sl_d: lv.risk, tp_d: Math.abs(lv.tp2 - lv.entry) })}">Wszedłem w pozycję</a>` : ''}
+    <button class="btn analysis pro-only" id="btn-analiza" style="width:100%;margin-top:10px">ANALIZA</button>
+    <div class="dim" style="font-size:11px;margin-top:8px;text-align:center">W XTB licz SL i TP od swojej ceny wejścia (odległości wyżej). Aplikacja nie składa zleceń.</div>
   </div>`;
 }
 

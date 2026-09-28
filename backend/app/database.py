@@ -45,6 +45,18 @@ CREATE TABLE IF NOT EXISTS alerts_log (
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at INTEGER NOT NULL,
+    signal_id INTEGER,
+    symbol TEXT NOT NULL, direction TEXT NOT NULL,
+    entry REAL NOT NULL, sl REAL, tp REAL, lots REAL NOT NULL,
+    ref_price REAL,                          -- cena ze źródła danych w chwili zapisu (do szacowania P/L)
+    status TEXT NOT NULL DEFAULT 'OPEN',     -- OPEN | CLOSED
+    exit_price REAL, closed_at INTEGER,
+    pnl_pln REAL, pnl_manual INTEGER DEFAULT 0,
+    note TEXT
+);
 """
 
 
@@ -201,6 +213,51 @@ class Database:
             rows = self._conn.execute(
                 "SELECT * FROM alerts_log WHERE id>? ORDER BY id DESC LIMIT ?", [since_id, limit]).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------ positions
+    def insert_position(self, p: dict) -> int:
+        cols = ["created_at", "signal_id", "symbol", "direction", "entry", "sl", "tp", "lots", "ref_price", "note"]
+        data = {"created_at": int(time.time()), **p}
+        with self._lock:
+            cur = self._conn.execute(
+                f"INSERT INTO positions ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                [data.get(c) for c in cols])
+            self._conn.commit()
+            return cur.lastrowid
+
+    def update_position(self, pos_id: int, **fields) -> None:
+        if not fields:
+            return
+        sets = ", ".join(f"{k}=?" for k in fields)
+        with self._lock:
+            self._conn.execute(f"UPDATE positions SET {sets} WHERE id=?", [*fields.values(), pos_id])
+            self._conn.commit()
+
+    def get_position(self, pos_id: int) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM positions WHERE id=?", [pos_id]).fetchone()
+        return dict(row) if row else None
+
+    def list_positions(self, status: str | None = None, limit: int = 1000) -> list[dict]:
+        q, args = "SELECT * FROM positions", []
+        if status:
+            q += " WHERE status=?"; args.append(status)
+        q += " ORDER BY COALESCE(closed_at, created_at) DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self._conn.execute(q, args).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_position(self, pos_id: int) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM positions WHERE id=?", [pos_id])
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def get_signal(self, sig_id: int) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM signals WHERE id=?", [sig_id]).fetchone()
+        return dict(row) if row else None
 
     # ------------------------------------------------------------------ settings
     def get_setting(self, key: str, default: Any = None) -> Any:

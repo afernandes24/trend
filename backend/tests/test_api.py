@@ -236,3 +236,23 @@ def test_telegram_channel(monkeypatch):
     with pytest.raises(ChannelError, match="chat not found"):
         ch.send("x", "y")
     assert TelegramChannel(Settings()).configured() is False
+
+
+def test_positions_api(client):
+    r = client.post("/api/positions", json={"symbol": "GOLD", "direction": "LONG", "entry": 3600, "sl": 3590,
+                                            "tp": 3620, "lots": 0.02})
+    assert r.status_code == 200, r.text
+    pid = r.json()["id"]
+    assert client.get("/api/positions").json()["stats"]["open_count"] >= 1
+    bad = client.post("/api/positions", json={"symbol": "GOLD", "direction": "LONG", "entry": 3600, "sl": 3610,
+                                              "lots": 0.02})
+    assert bad.status_code == 400 and "Stop Loss" in bad.json()["detail"]
+    c = client.post(f"/api/positions/{pid}/close", json={"exit_price": 3610})
+    assert c.status_code == 200 and c.json()["pnl_pln"] > 0
+    assert client.post(f"/api/positions/{pid}/reopen").json()["status"] == "OPEN"
+    assert client.delete(f"/api/positions/{pid}").status_code == 200
+    assert client.delete(f"/api/positions/{pid}").status_code == 404
+    sigs = client.get("/api/signals?limit=1").json()["items"]
+    if sigs:
+        pf = client.get(f"/api/positions/prefill?signal={sigs[0]['id']}").json()
+        assert pf["symbol"] == sigs[0]["symbol"]

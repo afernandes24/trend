@@ -370,3 +370,12 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ------------------------------------------------ tryb prosty / zaawansowany */
+.pro-toggle { margin-top: 18px; padding: 8px 10px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+.mobile-only { display: none; }
+body:not(.pro) .pro-only { display: none !important; }
+body.pro .simple-only { display: none !important; }
+.chip input[type="checkbox"] { width: 13px; height: 13px; }
+@media (max-width: 900px) { .mobile-only { display: inline-flex; } }
+a.btn, a.btn:hover { text-decoration: none; }

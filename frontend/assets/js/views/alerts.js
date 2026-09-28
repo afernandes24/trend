@@ -17,8 +17,8 @@ export async function render(root, ctx) {
       <div class="panel-pad stack" style="gap:18px">
         <div><div class="flabel" style="margin-bottom:8px">Kanały</div><div class="checks">
           <label class="check"><input type="checkbox" id="al-tg" ${s.telegram ? 'checked' : ''}> Telegram</label>
-          <label class="check"><input type="checkbox" id="al-email" ${s.email ? 'checked' : ''}> Email</label>
-          <label class="check"><input type="checkbox" id="al-sms" ${s.sms ? 'checked' : ''}> SMS</label>
+          <label class="check pro-only"><input type="checkbox" id="al-email" ${s.email ? 'checked' : ''}> Email</label>
+          <label class="check pro-only"><input type="checkbox" id="al-sms" ${s.sms ? 'checked' : ''}> SMS</label>
           <label class="check"><input type="checkbox" id="al-browser" ${store.get('browserNotify', false) ? 'checked' : ''}> Powiadomienia w przeglądarce</label>
         </div></div>
         <div><div class="flabel" style="margin-bottom:8px">Minimalny score alertu</div><div class="checks">
@@ -44,10 +44,10 @@ export async function render(root, ctx) {
           <div class="row between"><div><b>Telegram</b> <span class="muted">(najszybszy)</span><div style="margin-top:4px">${chStatus(ch.telegram)}</div></div>
             <div class="row" style="gap:6px"><button class="btn sm" id="al-chats">Znajdź chat ID</button><button class="btn sm" data-test="telegram">Wyślij test</button></div></div>
           <div id="al-chat-out"></div>
-          <div class="row between"><div><b>Email (SMTP)</b><div style="margin-top:4px">${chStatus(ch.email)}</div></div><button class="btn sm" data-test="email">Wyślij test</button></div>
-          <div class="row between"><div><b>SMS</b> <span class="muted">(${esc(ch.sms.provider)})</span><div style="margin-top:4px">${chStatus(ch.sms)}</div></div><button class="btn sm" data-test="sms">Wyślij test</button></div>
+          <div class="row between pro-only"><div><b>Email (SMTP)</b><div style="margin-top:4px">${chStatus(ch.email)}</div></div><button class="btn sm" data-test="email">Wyślij test</button></div>
+          <div class="row between pro-only"><div><b>SMS</b> <span class="muted">(${esc(ch.sms.provider)})</span><div style="margin-top:4px">${chStatus(ch.sms)}</div></div><button class="btn sm" data-test="sms">Wyślij test</button></div>
         </div>
-        <div class="notebox" style="margin-top:14px">Tokeny i dane dostępowe (Telegram, SMTP, SMS) ustawiasz w <b>Variables</b> na Railway (lokalnie: plik <span class="mono">.env</span>) — nie są zapisywane w bazie ani widoczne w przeglądarce. Po zmianie zmiennych aplikacja uruchamia się ponownie.</div>
+        <div class="notebox pro-only" style="margin-top:14px">Tokeny i dane dostępowe (Telegram, SMTP, SMS) ustawiasz w <b>Variables</b> na Railway (lokalnie: plik <span class="mono">.env</span>) — nie są zapisywane w bazie ani widoczne w przeglądarce. Po zmianie zmiennych aplikacja uruchamia się ponownie.</div>
       </div>
     </div>
   </div>

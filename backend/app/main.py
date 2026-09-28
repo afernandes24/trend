@@ -20,6 +20,7 @@ from .database import Database
 from .market_data.service import MarketDataService
 from .notifications.dispatcher import Notifier
 from .services.analysis import AnalysisService
+from .services.positions import PositionService
 from .services.scheduler import Scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -30,6 +31,7 @@ def build_services(app: FastAPI, db: Database | None = None, market: MarketDataS
     app.state.market = market or MarketDataService(app.state.db)
     app.state.notifier = Notifier(app.state.db, settings, fx=app.state.market.fx_rates)
     app.state.analysis = AnalysisService(app.state.db, app.state.market, app.state.notifier)
+    app.state.positions = PositionService(app.state.db, app.state.market, app.state.notifier)
     app.state.scheduler = Scheduler(app.state.market, app.state.analysis, settings.scan_interval_seconds,
                                     settings.h1_refresh_seconds)
 

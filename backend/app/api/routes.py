@@ -95,6 +95,10 @@ def _tile(a: dict) -> dict:
     mtf = a.get("mtf") or {}
     t["mtf"] = [{"tf": r["tf"], "trend": r.get("trend"), "agree": r.get("agree")} for r in mtf.get("rows", [])]
     t["higher_tf_aligned"] = mtf.get("higher_tf_aligned")
+    lv = ((a.get("timeframes") or {}).get(a.get("setup_tf") or "15M") or {}).get("levels") or {}
+    if lv.get("entry") is not None:
+        t["sl_d"] = abs(lv["entry"] - lv["sl"])
+        t["tp_d"] = abs(lv["tp2"] - lv["entry"])
     t["all_aligned"] = mtf.get("all_aligned")
     return t
 
@@ -209,6 +213,61 @@ class BackfillIn(BaseModel):
 @router.post("/signals/backfill")
 def backfill(request: Request, body: BackfillIn):
     return {"inserted": _svc(request).analysis.backfill(max(1, min(body.days, 730)))}
+
+
+# ---------------------------------------------------------------- positions (Moje pozycje)
+def _pos(request: Request):
+    return _svc(request).positions
+
+
+def _pos_call(fn, *a, **k):
+    from ..services.positions import PositionError
+    try:
+        return fn(*a, **k)
+    except PositionError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/positions")
+def positions(request: Request):
+    return _pos(request).overview()
+
+
+@router.get("/positions/prefill")
+def positions_prefill(request: Request, signal: int):
+    return _pos_call(_pos(request).prefill, signal)
+
+
+@router.post("/positions")
+def positions_open(request: Request, body: dict):
+    return _pos_call(_pos(request).open, body)
+
+
+@router.put("/positions/{pos_id}")
+def positions_update(request: Request, pos_id: int, body: dict):
+    return _pos_call(_pos(request).update, pos_id, body)
+
+
+class CloseIn(BaseModel):
+    exit_price: float | None = None
+    pnl_pln: float | None = None
+
+
+@router.post("/positions/{pos_id}/close")
+def positions_close(request: Request, pos_id: int, body: CloseIn):
+    return _pos_call(_pos(request).close, pos_id, body.exit_price, body.pnl_pln)
+
+
+@router.post("/positions/{pos_id}/reopen")
+def positions_reopen(request: Request, pos_id: int):
+    return _pos_call(_pos(request).reopen, pos_id)
+
+
+@router.delete("/positions/{pos_id}")
+def positions_delete(request: Request, pos_id: int):
+    if not _pos(request).delete(pos_id):
+        raise HTTPException(404, "Nie ma takiej pozycji")
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------- alerts
