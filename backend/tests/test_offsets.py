@@ -54,10 +54,7 @@ def test_offset_moves_open_signals_and_positions(db, market):
     assert ps.enrich(db.get_position(pos["id"]))["est_pnl_pln"] == pytest.approx(0.0)
 
 
-def test_alert_mentions_correction(db, market):
-    n = Notifier(db, Settings(), fx=market.fx_rates)
+def test_alert_uses_corrected_prices(db, market):
     raw, _ = market.raw_last("GOLD")
     market.set_offsets({"GOLD": raw - 39.0})
-    _, text = n.format_signal({"symbol": "GOLD", "direction": "SHORT", "tf": "15M", "score": 80, "entry": 4212.0,
-                               "sl": 4220.0, "tp1": 4200.0, "tp2": 4196.0, "tp3": 4188.0, "reasons": []})
-    assert "skorygowane do XTB (korekta -39.00" in text
+    assert market.get_candles("GOLD", "5M")["close"].iloc[-1] == pytest.approx(raw - 39.0)

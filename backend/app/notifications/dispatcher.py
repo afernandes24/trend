@@ -130,64 +130,33 @@ class Notifier:
 
     # ------------------------------------------------------------ format
     def format_signal(self, sig: dict, cfg: dict | None = None) -> tuple[str, str]:
+        """Krótki alert: kierunek, poziomy z odległościami, wolumen i link do zapisania pozycji."""
         cfg = cfg or self.get_settings()
-        inst = get_instrument(sig["symbol"])
-        d = inst.digits
-        long = sig["direction"] == "LONG"
-        emoji = "🟢" if long else "🔴"
-        tp_r = sig.get("tp_r") or [1.5, 2.0, 3.0]
-        reasons = [r["label"] for r in (sig.get("reasons") or []) if r.get("status") == "ok"]
+        d = get_instrument(sig["symbol"]).digits
+        emoji = "🟢" if sig["direction"] == "LONG" else "🔴"
         e = sig.get("entry")
 
-        def lvl(name, v, sign):
+        def lvl(name, v):
             if v is None or e is None:
-                return f"{name}: {fmt_price(v, d)}"
-            return f"{name}: {fmt_price(v, d)}   ({sign}{fmt_pts(v - e, d)} pkt)"
+                return f"{name} {fmt_price(v, d)}"
+            diff = v - e
+            sign = "+" if diff > 0 else "−"
+            return f"{name} {fmt_price(v, d)}  ({sign}{fmt_pts(diff, d)})"
 
-        up, down = ("+", "−") if long else ("−", "+")
-        lines = [
-            "🚨 NOWY SETUP",
-            "",
-            f"{emoji} {sig['symbol']} — {sig['direction']}  ({sig['tf']})",
-            f"Score: {sig['score']}/100",
-            "",
-            f"Entry: {fmt_price(e, d)}",
-            lvl("SL", sig.get("sl"), down),
-            lvl("TP1", sig.get("tp1"), up),
-            lvl("TP2", sig.get("tp2"), up),
-            lvl("TP3", sig.get("tp3"), up),
-            "RR: " + " / ".join(f"1:{r:g}" for r in tp_r),
-        ]
+        lines = [f"{emoji} {sig['symbol']} {sig['direction']} · {sig['tf']} · {sig['score']}/100",
+                 f"Entry {fmt_price(e, d)}",
+                 lvl("SL", sig.get("sl")), lvl("TP1", sig.get("tp1")), lvl("TP2", sig.get("tp2")),
+                 lvl("TP3", sig.get("tp3"))]
         if e is not None and sig.get("sl") is not None:
-            sl_pts = fmt_pts(sig["sl"] - e, d)
-            tp2_pts = fmt_pts(sig["tp2"] - e, d)
-            lines += ["", "📐 W XTB licz od SWOJEJ ceny wejścia:",
-                      f"SL = cena {down} {sl_pts} pkt  |  TP2 = cena {up} {tp2_pts} pkt"]
             ps = position_size(sig, cfg, (self.fx() or {}).get("rates", {}))
             if ps:
                 lots = f"{ps['lots']:.2f}".replace(".", ",")
-                risk_pln = f"{ps['real_risk']:,.0f}".replace(",", " ")
-                cap_pln = f"{cfg['capital']:,.0f}".replace(",", " ")
-                pct = f"{ps['real_risk_pct']:.2f}".replace(".", ",")
-                lines += [f"💰 Wolumen: {lots} lota → ryzyko ok. {risk_pln} PLN ({pct}% z {cap_pln} PLN)"]
-                if ps["below_min"]:
-                    lines += ["⚠️ Nawet minimalny lot przekracza Twoje ryzyko — rozważ pominięcie."]
+                pct = f"{ps['real_risk_pct']:.1f}".replace(".", ",")
+                lines.append(f"💰 {lots} lota · ryzyko {ps['real_risk']:.0f} PLN ({pct}%)"
+                             + (" ⚠️ za duże" if ps["below_min"] else ""))
         if self.app_url and sig.get("id"):
-            lines += ["", f"➕ Wszedłeś w pozycję? Zapisz ją: {self.app_url}/#/positions?signal={sig['id']}"]
-        lines += ["", "Powody: " + (" + ".join(reasons) if reasons else "—")]
-        hist = sig.get("historical")
-        if hist and hist.get("trades"):
-            lines += [f"Historical win rate: {hist['win_rate']}% (based on {hist['trades']} trades, "
-                      f"{hist['from'][:10]} – {hist['to'][:10]}, backtest)"]
-        corr = (self.db.get_setting("price_offsets", {}) or {}).get(sig["symbol"])
-        if corr:
-            when = datetime.fromtimestamp(corr["ts"], tz=timezone.utc).astimezone(LOCAL_TZ).strftime("%d.%m")
-            lines += ["", f"Ceny skorygowane do XTB (korekta {corr['offset']:+.{d}f} z {when}). Score ≠ prawdopodobieństwo zysku."]
-        elif self.source == "capital":
-            lines += ["", "Ceny CFD na żywo (Capital.com) — w XTB mogą różnić się o kilka pkt. Score ≠ prawdopodobieństwo zysku."]
-        else:
-            lines += ["", "Ceny z Yahoo — w XTB mogą się różnić. Score ≠ prawdopodobieństwo zysku."]
-        subject = f"🚨 {sig['symbol']} {sig['direction']} — score {sig['score']}/100 ({sig['tf']})"
+            lines.append(f"➕ {self.app_url}/#/positions?signal={sig['id']}")
+        subject = f"{emoji} {sig['symbol']} {sig['direction']} — {sig['score']}/100 ({sig['tf']})"
         return subject, "\n".join(lines)
 
     @staticmethod
@@ -286,12 +255,9 @@ class Notifier:
         r = res.get("result_r") or 0.0
         result = res.get("result")
         icon = "✅" if r > 0 else "❌" if r < 0 else "➖"
-        label = {"SL": "Stop Loss", "EXPIRED": "wygasł (brak rozstrzygnięcia)"}.get(result, f"{result} osiągnięty")
+        label = {"SL": "Stop Loss", "EXPIRED": "wygasł"}.get(result, result)
         opened = datetime.fromtimestamp(sig["bar_ts"], tz=timezone.utc).astimezone(LOCAL_TZ).strftime("%d.%m %H:%M")
-        text = (f"{icon} {sig['symbol']} {sig['direction']} ({sig['tf']}) → {label}\n"
-                f"Wynik: {r:+.2f}R\n"
-                f"Sygnał z {opened}, score {sig['score']}.\n\n"
-                "Wynik liczony od cen z alertu (Yahoo) — w XTB mógł być nieco inny.")
+        text = f"{icon} {sig['symbol']} {sig['direction']} → {label} ({r:+.1f}R)\nsygnał z {opened}"
         return self.send_info(f"{icon} {sig['symbol']} {sig['direction']} → {result} ({r:+.2f}R)", text,
                               sig["symbol"], sig["direction"], sig["id"])
 

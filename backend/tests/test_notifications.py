@@ -53,16 +53,18 @@ def test_position_size():
     assert ps2["below_min"] and ps2["lots"] == 0.01
 
 
-def test_alert_text_has_points_and_volume(notifier):
+def test_alert_text_is_short(notifier):
     _, text = notifier.format_signal({**SIG, "symbol": "US100", "entry": 24850.0, "sl": 24720.0,
-                                      "tp1": 25045.0, "tp2": 25110.0, "tp3": 25240.0})
-    assert "(−130,00 pkt)" in text.replace("130.00", "130,00") or "(−130.00 pkt)" in text
-    assert "SL = cena − 130.00 pkt" in text and "TP2 = cena + 260.00 pkt" in text
-    assert "Wolumen: 0,01 lota" in text and "przekracza" in text
+                                      "tp1": 25045.0, "tp2": 25110.0, "tp3": 25240.0, "score": 88})
+    lines = text.split("\n")
+    assert lines[0] == "🟢 US100 LONG · 15M · 88/100"
+    assert "SL 24 720.00  (−130.00)" in text and "TP2 25 110.00  (+260.00)" in text
+    assert "0,01 lota" in text and "za duże" in text
+    assert len(lines) <= 8 and "Powody" not in text and "Historical" not in text
     _, short = notifier.format_signal({**SIG, "direction": "SHORT", "sl": 3605.0, "tp2": 3590.0,
                                        "tp1": 3592.5, "tp3": 3585.0})
-    assert "SL = cena + 5.00 pkt" in short and "TP2 = cena − 10.00 pkt" in short
-    assert "Wolumen: 0,05 lota" in short
+    assert "SL 3 605.00  (+5.00)" in short and "TP2 3 590.00  (−10.00)" in short
+    assert "0,05 lota" in short and "za duże" not in short
 
 
 def test_stale_filter(notifier):
@@ -102,7 +104,7 @@ def test_result_notification_only_for_alerted(notifier, db):
     notifier.dispatch(sig, True)
     out = notifier.notify_result(sig, {"result": "TP2", "result_r": 2.0})
     assert out and out[0]["status"] == "info"
-    assert "TP2 osiągnięty" in notifier.telegram.sent[-1] and "+2.00R" in notifier.telegram.sent[-1]
+    assert notifier.telegram.sent[-1].startswith("✅ GOLD LONG → TP2 (+2.0R)")
     # raport nie resetuje cooldownu i nie jest liczony jako alert
     assert db.last_alert_ts("GOLD", "LONG") is not None
 
