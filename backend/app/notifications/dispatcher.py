@@ -297,7 +297,8 @@ class Notifier:
             won = sum(1 for p in pos if (p["pnl_pln"] or 0) > 0)
             lines += ["", f"💼 Twoje pozycje: {len(pos)} zamkniętych, {won} na plusie",
                       f"Wynik: {pnl:+,.2f} PLN".replace(",", " ")]
-        lines += ["", "Wyniki alertów liczone od cen z alertów (Yahoo), bez spreadu."]
+        src = {"yahoo": "Yahoo", "capital": "Capital.com", "csv": "CSV", "xtb": "XTB"}.get(self.source, self.source)
+        lines += ["", f"Wyniki alertów liczone od cen z alertów ({src}), bez spreadu."]
         text = "\n".join(lines)
         sent = self.send_info(f"📊 {APP_NAME} — podsumowanie tygodnia {week}", text)
         self.db.set_setting("weekly_summary_sent", week)
