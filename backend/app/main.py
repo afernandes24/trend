@@ -22,6 +22,7 @@ from .notifications.dispatcher import Notifier
 from .services.analysis import AnalysisService
 from .services.positions import PositionService
 from .services.scheduler import Scheduler
+from .services.telegram_bot import TelegramBot
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -33,6 +34,8 @@ def build_services(app: FastAPI, db: Database | None = None, market: MarketDataS
     app.state.notifier.source = app.state.market.provider.name
     app.state.analysis = AnalysisService(app.state.db, app.state.market, app.state.notifier)
     app.state.positions = PositionService(app.state.db, app.state.market, app.state.notifier)
+    app.state.bot = TelegramBot(app.state.db, app.state.notifier, app.state.positions,
+                                tp_r=lambda: list(app.state.analysis.get_params().tp_r))
     live = app.state.market.provider.name == "capital"
     app.state.scheduler = Scheduler(app.state.market, app.state.analysis, settings.scan_interval_seconds,
                                     settings.h1_refresh_seconds,
@@ -46,7 +49,9 @@ async def lifespan(app: FastAPI):
         build_services(app)
     if settings.scanner_enabled and getattr(app.state, "autostart", True):
         app.state.scheduler.start()
+        app.state.bot.start()          # odbieranie wiadomości z Telegrama (wpisywanie pozycji)
     yield
+    app.state.bot.stop()
     await app.state.scheduler.stop()
 
 

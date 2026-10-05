@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS positions (
     pnl_pln REAL, pnl_manual INTEGER DEFAULT 0,
     note TEXT
 );
+CREATE TABLE IF NOT EXISTS tg_links (                -- wiadomość Telegram -> sygnał / pozycja (odpowiedzi w czacie)
+    chat_id TEXT NOT NULL, message_id INTEGER NOT NULL,
+    signal_id INTEGER, position_id INTEGER, ts INTEGER NOT NULL,
+    PRIMARY KEY (chat_id, message_id)
+);
 """
 
 
@@ -222,6 +227,41 @@ class Database:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM alerts_log WHERE id>? ORDER BY id DESC LIMIT ?", [since_id, limit]).fetchall()
+        return [dict(r) for r in rows]
+
+    def sent_alerts(self, channel: str = "telegram", since_ts: int | None = None, limit: int = 500) -> list[dict]:
+        """Alerty faktycznie wysłane danym kanałem + dane sygnału (jeden wiersz na sygnał)."""
+        q = ("SELECT MIN(a.ts) AS alert_ts, s.* FROM alerts_log a JOIN signals s ON s.id = a.signal_id "
+             "WHERE a.channel=? AND a.status='sent'")
+        args: list[Any] = [channel]
+        if since_ts:
+            q += " AND a.ts>=?"
+            args.append(since_ts)
+        q += " GROUP BY s.id ORDER BY alert_ts DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self._conn.execute(q, args).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------ telegram links
+    def add_tg_link(self, chat_id: str, message_id: int, signal_id: int | None = None,
+                    position_id: int | None = None) -> None:
+        with self._lock:
+            self._conn.execute("INSERT OR REPLACE INTO tg_links (chat_id, message_id, signal_id, position_id, ts) "
+                               "VALUES (?,?,?,?,?)", [str(chat_id), int(message_id), signal_id, position_id,
+                                                      int(time.time())])
+            self._conn.commit()
+
+    def get_tg_link(self, chat_id: str, message_id: int) -> dict | None:
+        with self._lock:
+            row = self._conn.execute("SELECT * FROM tg_links WHERE chat_id=? AND message_id=?",
+                                     [str(chat_id), int(message_id)]).fetchone()
+        return dict(row) if row else None
+
+    def positions_for_signal(self, signal_id: int) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM positions WHERE signal_id=? ORDER BY id DESC",
+                                      [signal_id]).fetchall()
         return [dict(r) for r in rows]
 
     # ------------------------------------------------------------------ positions

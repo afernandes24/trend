@@ -1,8 +1,10 @@
 """Notification System — filtry, cooldown, formatowanie, wysyłka alertów i raportów."""
 from __future__ import annotations
 
+import html
 import logging
 import math
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -32,6 +34,8 @@ DEFAULT_ALERT_SETTINGS = {
     # --- wolumen w alercie
     "capital": 10000.0,           # PLN
     "risk_pct": 1.0,              # % kapitału na transakcję
+    # --- nie wysyłaj, gdy nawet minimalny lot przekracza ryzyko
+    "risk_filter": True,
     # --- filtr spóźnionych alertów
     "stale_filter": True,
     "stale_r": 0.5,               # pomiń, jeśli cena odjechała od Entry o więcej niż 0.5R
@@ -56,6 +60,20 @@ def fmt_price(v: float | None, digits: int) -> str:
 
 def fmt_pts(v: float, digits: int) -> str:
     return fmt_price(abs(v), digits)
+
+
+SYMBOL_ICON = {"US100": "🇺🇸", "US500": "🇺🇸", "US30": "🇺🇸", "US2000": "🇺🇸", "GER40": "🇩🇪", "UK100": "🇬🇧",
+               "JAP225": "🇯🇵", "GOLD": "🥇", "SILVER": "🥈", "OIL.WTI": "🛢"}
+
+
+def plain(text_html: str) -> str:
+    """Wersja bez znaczników HTML (e-mail, dziennik w aplikacji)."""
+    return html.unescape(re.sub(r"<[^>]+>", "", text_html))
+
+
+def code_price(v: float | None, digits: int) -> str:
+    """Cena bez spacji (łatwa do skopiowania w Telegramie jednym dotknięciem)."""
+    return "—" if v is None else f"<code>{v:.{digits}f}</code>"
 
 
 def _hm(s: str) -> int:
@@ -130,33 +148,37 @@ class Notifier:
 
     # ------------------------------------------------------------ format
     def format_signal(self, sig: dict, cfg: dict | None = None) -> tuple[str, str]:
-        """Krótki alert: kierunek, poziomy z odległościami, wolumen i link do zapisania pozycji."""
+        """Krótki, kolorowy alert (HTML Telegrama): kierunek, poziomy z odległościami, wolumen, podpowiedź odpowiedzi."""
         cfg = cfg or self.get_settings()
         d = get_instrument(sig["symbol"]).digits
-        emoji = "🟢" if sig["direction"] == "LONG" else "🔴"
+        long = sig["direction"] == "LONG"
+        dots = "🟢🟢🟢" if long else "🔴🔴🔴"
         e = sig.get("entry")
 
-        def lvl(name, v):
+        def lvl(icon, name, v):
             if v is None or e is None:
-                return f"{name} {fmt_price(v, d)}"
+                return f"{icon} {name} {code_price(v, d)}"
             diff = v - e
-            sign = "+" if diff > 0 else "−"
-            return f"{name} {fmt_price(v, d)}  ({sign}{fmt_pts(diff, d)})"
+            return f"{icon} {name} {code_price(v, d)}  ({'+' if diff > 0 else '−'}{fmt_pts(diff, d)})"
 
-        lines = [f"{emoji} {sig['symbol']} {sig['direction']} · {sig['tf']} · {sig['score']}/100",
-                 f"Entry {fmt_price(e, d)}",
-                 lvl("SL", sig.get("sl")), lvl("TP1", sig.get("tp1")), lvl("TP2", sig.get("tp2")),
-                 lvl("TP3", sig.get("tp3"))]
+        lines = [f"{dots} <b>{sig['direction']} · {sig['symbol']}</b> {SYMBOL_ICON.get(sig['symbol'], '')}".rstrip(),
+                 f"<i>{sig['tf']} · score {sig['score']}/100</i>",
+                 "",
+                 f"▶️ Entry {code_price(e, d)}",
+                 lvl("🛑", "SL", sig.get("sl")), lvl("🎯", "TP1", sig.get("tp1")), lvl("🎯", "TP2", sig.get("tp2")),
+                 lvl("🎯", "TP3", sig.get("tp3"))]
+        lots_hint = None
         if e is not None and sig.get("sl") is not None:
             ps = position_size(sig, cfg, (self.fx() or {}).get("rates", {}))
             if ps:
+                lots_hint = ps["lots"]
                 lots = f"{ps['lots']:.2f}".replace(".", ",")
                 pct = f"{ps['real_risk_pct']:.1f}".replace(".", ",")
                 lines.append(f"💰 {lots} lota · ryzyko {ps['real_risk']:.0f} PLN ({pct}%)"
                              + (" ⚠️ za duże" if ps["below_min"] else ""))
-        if self.app_url and sig.get("id"):
-            lines.append(f"➕ {self.app_url}/#/positions?signal={sig['id']}")
-        subject = f"{emoji} {sig['symbol']} {sig['direction']} — {sig['score']}/100 ({sig['tf']})"
+        if e is not None:
+            lines.append(f"↩️ Wszedłeś? Odpowiedz: <code>{lots_hint or 0.01:.2f} {e:.{d}f}</code>")
+        subject = f"{'🟢' if long else '🔴'} {sig['symbol']} {sig['direction']} — {sig['score']}/100 ({sig['tf']})"
         return subject, "\n".join(lines)
 
     @staticmethod
@@ -186,6 +208,13 @@ class Notifier:
                 if abs(moved) > cfg["stale_r"]:
                     kier = "w stronę TP" if moved > 0 else "w stronę SL"
                     return False, f"cena odjechała od Entry o {abs(moved):.2f}R {kier} (spóźniony alert)"
+        if cfg.get("risk_filter") and sig.get("entry") is not None and sig.get("sl") is not None:
+            ps = position_size(sig, cfg, (self.fx() or {}).get("rates", {}))
+            if ps and ps["real_risk"] > ps["risk_amount"] * 1.1:
+                lots = f"{ps['lots']:.2f}".replace(".", ",")
+                real = f"{ps['real_risk_pct']:.1f}".replace(".", ",")
+                lim = f"{cfg['risk_pct']:g}".replace(".", ",")
+                return False, f"za duże ryzyko: min. lot {lots} = {real}% kapitału (limit {lim}%)"
         if in_quiet_hours(cfg):
             return False, f"ciche godziny ({cfg['quiet_from']}–{cfg['quiet_to']})"
         if cfg["news_filter"] and cfg["news_window_minutes"] > 0:
@@ -208,41 +237,54 @@ class Notifier:
                               channel="-", status="skipped", message=None, error=why)
             return [{"channel": "-", "status": "skipped", "reason": why}]
         subject, text = self.format_signal(sig, cfg)
+        flat = plain(text)
         # zawsze zapisujemy alert w aplikacji (powiadomienie w przeglądarce)
         self.db.log_alert(signal_id=sig.get("id"), symbol=sig["symbol"], direction=sig["direction"],
-                          channel="app", status="sent", message=text, error=None)
+                          channel="app", status="sent", message=flat, error=None)
         results.append({"channel": "app", "status": "sent"})
-        channels = ((cfg["telegram"], self.telegram, text), (cfg["email"], self.email, text),
+        channels = ((cfg["telegram"], self.telegram, text), (cfg["email"], self.email, flat),
                     (cfg["sms"], self.sms, self.format_sms(sig)))
         for enabled, ch, body in channels:
             if not enabled or not ch.configured():
                 continue            # kanał wyłączony albo bez konfiguracji (status widać w UI)
             try:
-                ch.send(subject, body)
+                ids = ch.send(subject, body)
                 status, err = "sent", None
+                self._link(ids, signal_id=sig.get("id"))
             except ChannelError as exc:
                 status, err = "failed", str(exc)
                 log.warning("Alert %s nieudany: %s", ch.name, exc)
             self.db.log_alert(signal_id=sig.get("id"), symbol=sig["symbol"], direction=sig["direction"],
-                              channel=ch.name, status=status, message=body, error=err)
+                              channel=ch.name, status=status, message=plain(body), error=err)
             results.append({"channel": ch.name, "status": status, "error": err})
         return results
 
+    def _link(self, ids, signal_id: int | None = None, position_id: int | None = None) -> None:
+        """Zapamiętuje, której wiadomości w Telegramie dotyczy sygnał/pozycja (do odpowiedzi w czacie)."""
+        if not isinstance(ids, list) or (signal_id is None and position_id is None):
+            return
+        for m in ids:
+            try:
+                self.db.add_tg_link(m["chat_id"], m["message_id"], signal_id, position_id)
+            except (KeyError, TypeError):
+                pass
+
     def send_info(self, subject: str, text: str, symbol: str | None = None, direction: str | None = None,
-                  signal_id: int | None = None) -> list[dict]:
-        """Wiadomości informacyjne (wyniki, raporty) — Telegram i e-mail, bez SMS i bez cooldownu."""
+                  signal_id: int | None = None, position_id: int | None = None) -> list[dict]:
+        """Wiadomości informacyjne (wyniki, raporty) — Telegram (HTML) i e-mail, bez SMS i bez cooldownu."""
         cfg = self.get_settings()
         out = []
         for enabled, ch in ((cfg["telegram"], self.telegram), (cfg["email"], self.email)):
             if not enabled or not ch.configured():
                 continue
             try:
-                ch.send(subject, text)
+                ids = ch.send(subject, text if ch.name == "telegram" else plain(text))
                 status, err = "info", None
+                self._link(ids, signal_id=signal_id, position_id=position_id)
             except ChannelError as exc:
                 status, err = "failed", str(exc)
             self.db.log_alert(signal_id=signal_id, symbol=symbol, direction=direction, channel=ch.name,
-                              status=status, message=text, error=err)
+                              status=status, message=plain(text), error=err)
             out.append({"channel": ch.name, "status": status, "error": err})
         return out
 
@@ -254,12 +296,17 @@ class Notifier:
             return []
         r = res.get("result_r") or 0.0
         result = res.get("result")
-        icon = "✅" if r > 0 else "❌" if r < 0 else "➖"
+        icon = "✅✅✅" if r > 0 else "⛔️⛔️⛔️" if result == "SL" else "⚪️"
         label = {"SL": "Stop Loss", "EXPIRED": "wygasł"}.get(result, result)
         opened = datetime.fromtimestamp(sig["bar_ts"], tz=timezone.utc).astimezone(LOCAL_TZ).strftime("%d.%m %H:%M")
-        text = f"{icon} {sig['symbol']} {sig['direction']} → {label} ({r:+.1f}R)\nsygnał z {opened}"
-        return self.send_info(f"{icon} {sig['symbol']} {sig['direction']} → {result} ({r:+.2f}R)", text,
-                              sig["symbol"], sig["direction"], sig["id"])
+        text = f"{icon} <b>{sig['symbol']} {sig['direction']} → {label} ({r:+.1f}R)</b>\n<i>sygnał z {opened}</i>"
+        mine = [p for p in self.db.positions_for_signal(sig["id"]) if p["status"] == "OPEN"]
+        if mine:
+            hint = "tp" if r > 0 and result != "EXPIRED" else "sl" if result == "SL" else "zamknij CENA"
+            text += f"\n↩️ Masz otwartą pozycję — zamknij ją odpowiedzią: <code>{hint}</code>"
+        return self.send_info(f"{icon[0]} {sig['symbol']} {sig['direction']} → {result} ({r:+.2f}R)", text,
+                              sig["symbol"], sig["direction"], sig["id"],
+                              position_id=mine[0]["id"] if mine else None)
 
     def weekly_summary(self, now: datetime | None = None, force: bool = False) -> dict | None:
         """Podsumowanie tygodnia: w piątek po 23:00 (czas PL) albo w weekend, raz na tydzień."""
@@ -285,7 +332,7 @@ class Notifier:
         for s in closed:
             by_sym[s["symbol"]] = by_sym.get(s["symbol"], 0.0) + s["result_r"]
         best = sorted(by_sym.items(), key=lambda x: -x[1])
-        lines = [f"📊 PODSUMOWANIE TYGODNIA ({week})", "",
+        lines = [f"🟣 <b>PODSUMOWANIE TYGODNIA</b> ({week})", "",
                  f"Alerty: {len(sigs)}  (zamknięte: {len(closed)}, otwarte: {len(sigs) - len(closed)})"]
         if closed:
             lines += [f"Win rate: {len(wins) / len(closed) * 100:.0f}%",
@@ -313,9 +360,9 @@ class Notifier:
         sample = {"symbol": "US100", "direction": "LONG", "tf": "15M", "score": 0, "entry": None, "sl": None,
                   "tp1": None, "tp2": None, "tp3": None, "reasons": []}
         text = (f"To jest wiadomość testowa {APP_NAME}. Konfiguracja kanału działa.\n\n"
-                "Przykładowy format alertu:\n\n" + self.format_signal(sample)[1])
+                "Przykładowy format alertu:\n\n" + plain(self.format_signal(sample)[1]))
         short = {"sms": f"{APP_NAME}: test SMS OK",
-                 "telegram": f"✅ {APP_NAME}: Telegram działa. Tu będą przychodzić alerty o nowych setupach."}
+                 "telegram": f"✅ <b>{APP_NAME}</b>: Telegram działa. Tu będą przychodzić alerty o nowych setupach."}
         try:
             ch.send(f"{APP_NAME} — test powiadomień", short.get(channel, text))
             return {"ok": True}

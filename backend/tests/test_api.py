@@ -144,6 +144,7 @@ def test_alert_settings_and_cooldown(client):
         def send(self, *a, **k):
             raise ChannelError("SMTP down")
     notifier.email = Broken()
+    notifier.save_settings({"risk_filter": False})
     res = notifier.dispatch({**sig, "symbol": "SILVER"}, mtf_aligned=True)
     assert any(x["status"] == "failed" for x in res)
 
@@ -226,11 +227,13 @@ def test_telegram_channel(monkeypatch):
                 return httpx.Response(200, json={"ok": True, "result": [{"message": {"chat": {"id": 42, "type": "private", "first_name": "Ala"}}}]})
             if json.get("chat_id") == "bad":
                 return httpx.Response(400, json={"ok": False, "description": "chat not found"})
-            return httpx.Response(200, json={"ok": True})
+            return httpx.Response(200, json={"ok": True, "result": {"message_id": 7}})
     monkeypatch.setattr(httpx, "Client", FakeClient)
     ch = TelegramChannel(s)
-    ch.send("x", "🚨 NOWY SETUP")
-    assert sent[0][1] == {"chat_id": "42", "text": "🚨 NOWY SETUP", "disable_web_page_preview": True}
+    ids = ch.send("x", "🚨 <b>NOWY SETUP</b>")
+    assert sent[0][1] == {"chat_id": "42", "text": "🚨 <b>NOWY SETUP</b>", "parse_mode": "HTML",
+                          "disable_web_page_preview": True}
+    assert ids == [{"chat_id": "42", "message_id": 7}]
     assert ch.find_chats()[0]["chat_id"] == 42
     s.telegram_chat_id = ["bad"]
     with pytest.raises(ChannelError, match="chat not found"):

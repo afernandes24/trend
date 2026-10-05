@@ -128,9 +128,9 @@ class TelegramChannel:
         req = {"TELEGRAM_BOT_TOKEN": self.s.telegram_bot_token, "TELEGRAM_CHAT_ID": self.s.telegram_chat_id}
         return [k for k, v in req.items() if not v]
 
-    def _call(self, method: str, **data) -> dict:
+    def _call(self, method: str, timeout: float = 15, **data) -> dict:
         try:
-            with httpx.Client(timeout=15) as cli:
+            with httpx.Client(timeout=timeout) as cli:
                 r = cli.post(self.API.format(token=self.s.telegram_bot_token, method=method), json=data)
         except httpx.HTTPError as exc:
             raise ChannelError(f"Telegram: {exc}") from exc
@@ -142,16 +142,38 @@ class TelegramChannel:
             raise ChannelError(f"Telegram HTTP {r.status_code}: {j.get('description') or r.text[:200]}")
         return j
 
-    def send(self, subject: str, text: str, html: str | None = None) -> None:
-        if not self.configured():
+    def send(self, subject: str, text: str, html: str | None = None, reply_to: int | None = None,
+             chats: list[str] | None = None) -> list[dict]:
+        """`text` w formacie HTML Telegrama (<b>, <i>, <code>). Zwraca id wysłanych wiadomości."""
+        if not self.configured() and not chats:
             raise ChannelError(f"Telegram nieskonfigurowany (brak: {', '.join(self.missing())})")
-        for chat in self.s.telegram_chat_id:
-            self._call("sendMessage", chat_id=chat, text=text[:4000], disable_web_page_preview=True)
+        out = []
+        for chat in (chats or self.s.telegram_chat_id):
+            data = {"chat_id": chat, "text": text[:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
+            if reply_to:
+                data["reply_to_message_id"] = reply_to
+                data["allow_sending_without_reply"] = True
+            j = self._call("sendMessage", **data)
+            mid = (j.get("result") or {}).get("message_id")
+            if mid is not None:
+                out.append({"chat_id": str(chat), "message_id": mid})
+        return out
 
-    def find_chats(self) -> list[dict]:
-        """Lista czatów, które napisały do bota (do odczytania chat id)."""
+    def get_updates(self, offset: int | None, timeout: int = 25) -> list[dict]:
+        data = {"timeout": timeout, "allowed_updates": ["message"]}
+        if offset is not None:
+            data["offset"] = offset
+        return self._call("getUpdates", timeout=timeout + 10, **data).get("result", [])
+
+    def find_chats(self, seen: dict | None = None) -> list[dict]:
+        """Lista czatów, które napisały do bota (do odczytania chat id).
+
+        Gdy działa bot odbierający wiadomości (`seen`), korzystamy z jego listy — dwa równoległe
+        getUpdates kończą się błędem „Conflict" w Telegramie."""
         if not self.s.telegram_bot_token:
             raise ChannelError("Najpierw ustaw TELEGRAM_BOT_TOKEN")
+        if seen is not None:
+            return list(seen.values())
         res = self._call("getUpdates", limit=50).get("result", [])
         chats = {}
         for upd in res:

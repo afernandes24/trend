@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from datetime import datetime
 from typing import Any
 
@@ -65,8 +66,10 @@ def _check_symbol(symbol: str) -> str:
 @router.get("/health")
 def health(request: Request):
     s = _svc(request)
+    bot = getattr(s, "bot", None)
     return {"ok": True, "mode": "ANALIZA (brak wykonywania zleceń)", "provider": s.market.provider.name,
-            "scheduler": s.scheduler.status(), "last_scan": s.analysis.last_scan}
+            "scheduler": s.scheduler.status(), "last_scan": s.analysis.last_scan,
+            "telegram_bot": {"running": bool(bot and bot.running()), "error": bot.last_error if bot else None}}
 
 
 @router.get("/instruments")
@@ -84,8 +87,16 @@ def timeframes():
 def overview(request: Request):
     s = _svc(request)
     items = s.analysis.overview()
-    return {"items": [_tile(a) for a in items], "last_scan": s.analysis.last_scan,
-            "scheduler": s.scheduler.status()}
+    tiles = [_tile(a) for a in items]
+    # „Wszedłem” tylko dla alertów faktycznie wysłanych na Telegram (ostatnie 12 h, sygnał nadal otwarty)
+    recent: dict[str, dict] = {}
+    for r in s.db.sent_alerts("telegram", since_ts=int(time.time()) - 12 * 3600, limit=100):
+        if r["status"] == "OPEN" and r["symbol"] not in recent:
+            recent[r["symbol"]] = {"signal_id": r["id"], "direction": r["direction"], "ts": r["alert_ts"],
+                                   "taken": bool(s.db.positions_for_signal(r["id"]))}
+    for t in tiles:
+        t["alert"] = recent.get(t["symbol"])
+    return {"items": tiles, "last_scan": s.analysis.last_scan, "scheduler": s.scheduler.status()}
 
 
 def _tile(a: dict) -> dict:
@@ -345,10 +356,38 @@ def weekly_summary_now(request: Request):
 def telegram_chats(request: Request):
     """Pomocnik: pokazuje chat id osób, które napisały do bota (do wpisania w TELEGRAM_CHAT_ID)."""
     from ..notifications.channels import ChannelError
+    s = _svc(request)
+    bot = getattr(s, "bot", None)
     try:
-        return {"chats": _svc(request).notifier.telegram.find_chats()}
+        return {"chats": s.notifier.telegram.find_chats(seen=bot.seen_chats if bot and bot.running() else None)}
     except ChannelError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/alerts/sent")
+def alerts_sent(request: Request, days: int = Query(30, ge=0, le=3650), limit: int = Query(200, le=2000)):
+    """Dziennik: tylko alerty wysłane na Telegram, z wynikiem sygnału i Twoją pozycją (jeśli weszłeś)."""
+    s = _svc(request)
+    since = int(time.time()) - days * 86400 if days else None
+    rows = s.db.sent_alerts("telegram", since_ts=since, limit=limit)
+    for r in rows:
+        r["digits"] = get_instrument(r["symbol"]).digits
+        mine = s.db.positions_for_signal(r["id"])
+        r["position"] = ({k: mine[0][k] for k in ("id", "status", "entry", "lots", "pnl_pln")} if mine else None)
+    return {"items": rows}
+
+
+@router.get("/stats")
+def stats(request: Request, days: int = Query(30, ge=0, le=3650)):
+    from ..services.stats import alert_stats, trade_stats
+    s = _svc(request)
+    cfg = s.notifier.get_settings()
+    d = days or None
+    closed = [s.positions.enrich(p) for p in s.db.list_positions("CLOSED")]
+    return {"days": days, "capital": cfg["capital"], "risk_pct": cfg["risk_pct"],
+            "tp_r": list(s.analysis.get_params().tp_r),
+            "alerts": alert_stats(s.db, list(s.analysis.get_params().tp_r), cfg["risk_pct"], d),
+            "trades": trade_stats(closed, cfg["capital"], d)}
 
 
 @router.get("/alerts/log")

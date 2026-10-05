@@ -57,13 +57,15 @@ def test_alert_text_is_short(notifier):
     _, text = notifier.format_signal({**SIG, "symbol": "US100", "entry": 24850.0, "sl": 24720.0,
                                       "tp1": 25045.0, "tp2": 25110.0, "tp3": 25240.0, "score": 88})
     lines = text.split("\n")
-    assert lines[0] == "🟢 US100 LONG · 15M · 88/100"
-    assert "SL 24 720.00  (−130.00)" in text and "TP2 25 110.00  (+260.00)" in text
+    assert lines[0] == "🟢🟢🟢 <b>LONG · US100</b> 🇺🇸"
+    assert "SL <code>24720.00</code>  (−130.00)" in text and "TP2 <code>25110.00</code>  (+260.00)" in text
     assert "0,01 lota" in text and "za duże" in text
-    assert len(lines) <= 8 and "Powody" not in text and "Historical" not in text
+    assert "<code>0.01 24850.00</code>" in text          # podpowiedź odpowiedzi na Telegramie
+    assert len(lines) <= 11 and "Powody" not in text and "Historical" not in text
     _, short = notifier.format_signal({**SIG, "direction": "SHORT", "sl": 3605.0, "tp2": 3590.0,
                                        "tp1": 3592.5, "tp3": 3585.0})
-    assert "SL 3 605.00  (+5.00)" in short and "TP2 3 590.00  (−10.00)" in short
+    assert short.startswith("🔴🔴🔴 <b>SHORT · GOLD</b>")
+    assert "SL <code>3605.00</code>  (+5.00)" in short and "TP2 <code>3590.00</code>  (−10.00)" in short
     assert "0,05 lota" in short and "za duże" not in short
 
 
@@ -104,7 +106,7 @@ def test_result_notification_only_for_alerted(notifier, db):
     notifier.dispatch(sig, True)
     out = notifier.notify_result(sig, {"result": "TP2", "result_r": 2.0})
     assert out and out[0]["status"] == "info"
-    assert notifier.telegram.sent[-1].startswith("✅ GOLD LONG → TP2 (+2.0R)")
+    assert notifier.telegram.sent[-1].startswith("✅✅✅ <b>GOLD LONG → TP2 (+2.0R)</b>")
     # raport nie resetuje cooldownu i nie jest liczony jako alert
     assert db.last_alert_ts("GOLD", "LONG") is not None
 
@@ -129,3 +131,15 @@ def test_settings_validation(notifier):
         notifier.save_settings({"quiet_from": "abc"})
     s = notifier.save_settings({"risk_pct": 50, "capital": 5000})
     assert s["risk_pct"] == 50 and s["capital"] == 5000
+
+
+def test_risk_filter(notifier):
+    # US100: SL 130 pkt -> min. lot 0,01 = 104 PLN = 1,04% przy 10 000 PLN -> OK
+    big = {**SIG, "symbol": "US100", "entry": 24850.0, "sl": 24720.0, "tp1": 25045.0, "tp2": 25110.0,
+           "tp3": 25240.0}
+    assert notifier.dispatch(big, True)[0]["status"] == "sent"
+    notifier.save_settings({"capital": 5000})            # 0,01 lota = 2,1% > 1% -> pomijamy
+    r = notifier.dispatch({**big, "symbol": "US500"}, True)
+    assert r[0]["status"] == "skipped" and "za duże ryzyko" in r[0]["reason"]
+    notifier.save_settings({"risk_filter": False})
+    assert notifier.dispatch({**big, "symbol": "US500"}, True)[0]["status"] == "sent"
