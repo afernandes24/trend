@@ -88,7 +88,7 @@ class AnalysisService:
         signal = final_signal(setup, mtf, p)
         out = {
             "symbol": symbol, "name": inst.name, "category": inst.category, "digits": inst.digits,
-            "currency": inst.currency, "proxy_note": inst.proxy_note,
+            "currency": inst.currency, "proxy_note": self.market.proxy_note(inst),
             "setup_tf": SETUP_TF, "signal": signal, "timeframes": per_tf, "mtf": mtf,
             "price": None, "change_pct": None, "updated": datetime.now(timezone.utc).isoformat(),
             "min_score": p.min_score,
