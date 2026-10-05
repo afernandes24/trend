@@ -90,6 +90,8 @@ class CapitalProvider(MarketDataProvider):
     def _login(self) -> None:
         if self.missing():
             raise MarketDataError(f"Capital.com: brak zmiennych {', '.join(self.missing())}")
+        if not self.api_key.isascii() or self.api_key.lower().startswith("tw"):
+            raise MarketDataError("CAPITAL_API_KEY wygląda na przykładowy tekst — wklej prawdziwy klucz z Capital.com")
         with self._login_lock:
             r = self._client.post(f"{self.base}/api/v1/session",
                                   headers={"X-CAP-API-KEY": self.api_key, "Content-Type": "application/json"},

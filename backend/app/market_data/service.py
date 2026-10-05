@@ -209,11 +209,17 @@ class MarketDataService:
         rates = {**DEFAULT_FX, **self._fx}
         return {"rates": rates, "live": sorted(self._fx), "defaults_used": sorted(set(DEFAULT_FX) - set(self._fx))}
 
+    def proxy_note(self, inst) -> str:
+        """Opis źródła instrumentu — notatki o futures Yahoo tylko gdy faktycznie używamy Yahoo."""
+        if self.provider.name == "yahoo":
+            return inst.proxy_note
+        return f"{self.provider.describe()}"
+
     def data_status(self) -> dict:
         stats = {(r["symbol"], r["tf"]): r for r in self.db.candle_stats()}
         out = []
         for inst in INSTRUMENTS:
-            row = {"symbol": inst.symbol, "proxy_note": inst.proxy_note,
+            row = {"symbol": inst.symbol, "proxy_note": self.proxy_note(inst),
                    "source_symbol": getattr(self.provider, "source_symbol", lambda s: None)(inst.symbol),
                    "fetch": self.status.get(inst.symbol)}
             for tf in ("5M", "1H"):
