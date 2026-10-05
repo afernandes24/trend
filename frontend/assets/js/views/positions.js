@@ -16,7 +16,7 @@ export async function render(root, ctx) {
   const bySym = Object.fromEntries(insts.map((i) => [i.symbol, i]));
   root.innerHTML = `
     <div class="row between" style="margin-bottom:18px">
-      <div class="muted" style="font-size:13px">Zapisuj pozycje otwarte z alertów — aplikacja liczy zysk i stratę w PLN.</div>
+      <div class="muted" style="font-size:13px">Zapisz pozycję tutaj albo odpowiedz na alert w Telegramie, np. <span class="mono">0.01 4251.7</span>.</div>
       <button class="btn primary" id="p-add">+ Dodaj pozycję</button>
     </div>
     <div class="kpis" id="p-kpis"><div class="panel kpi skeleton" style="height:84px"></div></div>
@@ -128,7 +128,12 @@ export async function render(root, ctx) {
   }
 
   async function addModal(pre = {}) {
-    const sym = pre.symbol || 'US100';
+    // wybór alertu wysłanego na Telegram (ostatnie 2 dni) — SL/TP i lot uzupełnią się z alertu
+    let recent = [];
+    if (!pre.signal_id) {
+      try { recent = (await api('/alerts/sent?days=2')).items.filter((r) => !r.position); } catch { /* */ }
+    }
+    const sym = pre.symbol || recent[0]?.symbol || 'US100';
     // proponowany wolumen z ustawień alertów (kapitał × ryzyko%), gdy znamy odległość SL
     if (!pre.suggested_lots && pre.sl_distance && bySym[sym]) {
       try {
@@ -141,6 +146,10 @@ export async function render(root, ctx) {
     }
     const m = modal(`
       <div class="section-title" style="margin-top:0">Nowa pozycja${pre.signal_id ? ` <span class="muted">(z alertu #${pre.signal_id})</span>` : ''}</div>
+      ${!pre.signal_id && recent.length ? `<div class="field" style="margin-bottom:12px"><label>Z alertu</label><select id="n-alert">
+        <option value="">— wybierz alert —</option>
+        ${recent.map((r) => `<option value="${r.id}">${esc(r.symbol)} ${r.direction} · ${fmtTime(r.alert_ts)} · Entry ${fmt(r.entry, r.digits)}${r.status === 'OPEN' ? '' : ' (zamknięty)'}</option>`).join('')}
+        <option value="manual">bez alertu (ręcznie)</option></select></div>` : ''}
       <div class="form-grid" style="grid-template-columns:1fr 1fr">
         <div class="field"><label>Instrument</label><select id="n-sym">${insts.map((i) => `<option ${i.symbol === sym ? 'selected' : ''}>${esc(i.symbol)}</option>`).join('')}</select></div>
         <div class="field"><label>Kierunek</label><select id="n-dir"><option ${pre.direction !== 'SHORT' ? 'selected' : ''}>LONG</option><option ${pre.direction === 'SHORT' ? 'selected' : ''}>SHORT</option></select></div>
@@ -153,6 +162,13 @@ export async function render(root, ctx) {
       <div id="n-prev" class="muted" style="margin-top:12px;font-size:13px"></div>
       <div class="row" style="justify-content:flex-end;margin-top:16px;gap:8px"><button class="btn" id="n-cancel">Anuluj</button><button class="btn primary" id="n-ok">Zapisz pozycję</button></div>`);
     const q = (s) => m.querySelector(s);
+    if (q('#n-alert')) {
+      q('#n-alert').onchange = async (e) => {
+        const v = e.target.value;
+        if (!v || v === 'manual') return;
+        try { addModal(await api(`/positions/prefill?signal=${v}`)); } catch (err) { toast(err.message, 'error'); }
+      };
+    }
     let touched = { sl: false, tp: false };
     q('#n-sl').addEventListener('input', () => { touched.sl = true; });
     q('#n-tp').addEventListener('input', () => { touched.tp = true; });

@@ -70,10 +70,12 @@ export async function render(root, ctx) {
   return () => clearInterval(timer);
 }
 
+// „Wszedłem” tylko przy alercie faktycznie wysłanym na Telegram (ostatnie 12 h)
 function enterLink(t) {
-  if (t.signal === 'WAIT' || !t.sl_d) return '';
-  const q = new URLSearchParams({ symbol: t.symbol, dir: t.signal, sl_d: t.sl_d, tp_d: t.tp_d });
-  return `<a class="btn sm primary" data-enter href="#/positions?${q}" style="margin-top:14px;width:100%">Wszedłem w pozycję</a>`;
+  const a = t.alert;
+  if (!a) return '';
+  if (a.taken) return `<a class="btn sm" data-enter href="#/positions" style="margin-top:14px;width:100%">Pozycja zapisana ✓</a>`;
+  return `<a class="btn sm primary" data-enter href="#/positions?signal=${a.signal_id}" style="margin-top:14px;width:100%">Wszedłem — alert ${esc(a.direction)} ${fmtTime(a.ts, false)}</a>`;
 }
 
 function tileSimple(t) {

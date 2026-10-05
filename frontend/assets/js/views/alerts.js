@@ -1,5 +1,5 @@
-// ALERTY — ustawienia powiadomień, status kanałów, test, dziennik.
-import { api, esc, fmtTime, store, toast } from '../lib.js';
+// ALERTY — dziennik alertów wysłanych na Telegram (+ „Wszedłem”) i zwijane ustawienia powiadomień.
+import { api, esc, fmt, fmtR, fmtTime, signCls, store, toast } from '../lib.js';
 
 export async function render(root, ctx) {
   const data = await api('/settings/alerts');
@@ -11,6 +11,23 @@ export async function render(root, ctx) {
     ? `<span class="badge LONG">skonfigurowany</span>`
     : `<span class="badge warn">brak konfiguracji</span> <span class="muted" style="font-size:12px">ustaw zmienne: <span class="mono">${esc(c.missing.join(', '))}</span></span>`;
   root.innerHTML = `
+  <div class="row between" style="margin-bottom:12px;gap:10px;flex-wrap:wrap">
+    <h2 class="section-title" style="margin:0">Dziennik alertów <span class="muted" style="font-size:12px;font-weight:400">· tylko wysłane na Telegram</span></h2>
+    <div class="seg" id="al-days">${[[7, '7 dni'], [30, '30 dni'], [0, 'wszystko']].map(([v, l]) => `<button data-d="${v}" class="${v === store.get('alDays', 7) ? 'on' : ''}">${l}</button>`).join('')}</div>
+  </div>
+  <div class="panel"><div class="table-wrap" id="al-log"><div class="skeleton" style="height:160px;margin:16px"></div></div></div>
+  <details class="fold" style="margin-top:16px">
+    <summary>Wpisywanie pozycji z Telegrama</summary>
+    <div class="fold-body muted" style="font-size:13px;line-height:1.9">
+      Odpowiedz w Telegramie <b>na wiadomość z alertem</b>:
+      <span class="mono">0.01 4251.7</span> (lot i cena wejścia z XTB) albo <span class="mono">tak</span> (lot i cena z alertu) — pozycja od razu pojawi się w „Moje pozycje”.<br>
+      Zamknięcie — odpowiedz na potwierdzenie pozycji lub wynik alertu: <span class="mono">zamknij 4230</span> · <span class="mono">tp</span> · <span class="mono">sl</span> · <span class="mono">wynik -45 zł</span> · <span class="mono">usuń</span><br>
+      Bez odpowiadania: <span class="mono">GOLD 0.01 4251.7</span> · <span class="mono">zamknij GOLD 4230</span> · <span class="mono">pozycje</span> · <span class="mono">statystyki</span> · <span class="mono">pomoc</span>
+    </div>
+  </details>
+  <details class="fold" id="al-fold" style="margin-top:12px">
+  <summary>Ustawienia alertów</summary>
+  <div class="fold-body">
   <div class="two" style="align-items:start">
     <div class="panel">
       <div class="panel-head"><h3>Ustawienia alertów</h3><button class="btn sm primary" id="al-save">Zapisz</button></div>
@@ -61,6 +78,7 @@ export async function render(root, ctx) {
           <div class="field"><label>Ryzyko / transakcję (%)</label><input type="number" id="al-risk" min="0.1" max="5" step="0.1" value="${s.risk_pct}"></div>
         </div>
         <div class="muted" style="font-size:12px;margin-top:10px">Alert poda liczbę lotów, przy której strata na SL ≈ ryzyko. Wartość punktu zweryfikuj w xStation.</div>
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="al-riskf" ${s.risk_filter ? 'checked' : ''}> Nie wysyłaj alertu, gdy nawet minimalny lot (0,01) przekracza ryzyko</label>
       </div>
       <div class="stack" style="gap:14px">
         <div class="flabel">Filtry alertów</div>
@@ -85,7 +103,8 @@ export async function render(root, ctx) {
       </div>
     </div>
   </div>
-  <div class="panel" style="margin-top:16px"><div class="panel-head"><h3>Dziennik alertów</h3></div><div class="table-wrap" id="al-log"></div></div>`;
+  </div>
+  </details>`;
 
   const $ = (id) => root.querySelector(id);
   $('#al-save').onclick = async () => {
@@ -94,7 +113,7 @@ export async function render(root, ctx) {
       min_score: +(root.querySelector('input[name="al-min"]:checked')?.value ?? s.min_score),
       long: $('#al-long').checked, short: $('#al-short').checked,
       require_mtf: $('#al-mtf').checked, cooldown_minutes: +$('#al-cool').value,
-      capital: +$('#al-cap').value, risk_pct: +$('#al-risk').value,
+      capital: +$('#al-cap').value, risk_pct: +$('#al-risk').value, risk_filter: $('#al-riskf').checked,
       stale_filter: $('#al-stale').checked, stale_r: +$('#al-stale-r').value,
       quiet_enabled: $('#al-quiet').checked, quiet_from: $('#al-qf').value || '23:00', quiet_to: $('#al-qt').value || '07:00',
       news_filter: $('#al-news').checked, news_window_minutes: +$('#al-news-min').value,
@@ -138,16 +157,46 @@ export async function render(root, ctx) {
     };
   });
 
+  const resBadge = (r) => {
+    if (r.status === 'OPEN') return '<span class="badge info">w grze</span>';
+    const cls = r.result_r > 0 ? 'LONG' : r.result_r < 0 ? 'SHORT' : '';
+    const label = { SL: 'SL', EXPIRED: 'wygasł' }[r.result] || r.result;
+    return `<span class="badge ${cls}">${esc(label)} ${fmtR(r.result_r, 1)}</span>`;
+  };
+  const mine = (r) => {
+    if (r.position) {
+      const p = r.position;
+      return p.status === 'OPEN' ? '<a href="#/positions" class="badge info">otwarta</a>'
+        : `<a href="#/positions" class="mono ${signCls(p.pnl_pln)}" style="font-weight:600">${p.pnl_pln > 0 ? '+' : ''}${fmt(p.pnl_pln, 2)} PLN</a>`;
+    }
+    return r.status === 'OPEN' ? `<a class="btn sm" href="#/positions?signal=${r.id}">Wszedłem</a>` : '<span class="dim">—</span>';
+  };
   async function loadLog() {
-    const { items } = await api('/alerts/log?limit=100');
+    const days = store.get('alDays', 7);
+    let items;
+    try { ({ items } = await api(`/alerts/sent?days=${days}`)); } catch (e) { $('#al-log').innerHTML = `<div class="errbox" style="margin:16px">${esc(e.message)}</div>`; return; }
     if (!ctx.isCurrent()) return;
-    $('#al-log').innerHTML = items.length ? `<table class="t cards"><thead><tr><th>Czas</th><th>Instrument</th><th>Kierunek</th><th>Kanał</th><th>Status</th><th>Szczegóły</th></tr></thead><tbody>
-      ${items.map((a) => `<tr><td data-l="Czas" class="mono">${fmtTime(a.ts)}</td><td data-l="Instrument"><b>${esc(a.symbol || '')}</b></td>
-        <td data-l="Kierunek" class="${a.direction === 'LONG' ? 'long' : 'short'}">${esc(a.direction || '')}</td><td data-l="Kanał">${esc(a.channel)}</td>
-        <td data-l="Status"><span class="badge ${a.status === 'sent' ? 'LONG' : a.status === 'failed' ? 'SHORT' : a.status === 'info' ? 'info' : ''}">${esc({ sent: 'wysłany', skipped: 'pominięty', failed: 'błąd', info: 'raport' }[a.status] || a.status)}</span></td>
-        <td data-l="Szczegóły" class="muted" style="white-space:normal">${esc(a.error || '')}</td></tr>`).join('')}</tbody></table>`
-      : '<div class="empty">Brak alertów. Pojawią się, gdy skaner wykryje nowy setup.</div>';
+    $('#al-log').innerHTML = items.length ? `<table class="t cards"><thead><tr><th>Wysłany</th><th>Instrument</th><th>Kierunek</th><th class="r">Entry</th><th class="r">Score</th><th>Wynik alertu</th><th class="r">Moja pozycja</th></tr></thead><tbody>
+      ${items.map((r) => `<tr>
+        <td data-l="Wysłany" class="mono">${fmtTime(r.alert_ts)}</td>
+        <td data-l="Instrument"><b>${esc(r.symbol)}</b></td>
+        <td data-l="Kierunek" class="${r.direction === 'LONG' ? 'long' : 'short'}">${esc(r.direction)}</td>
+        <td data-l="Entry" class="r mono">${fmt(r.entry, r.digits)}</td>
+        <td data-l="Score" class="r mono">${r.score}</td>
+        <td data-l="Wynik alertu">${resBadge(r)}</td>
+        <td data-l="Moja pozycja" class="r">${mine(r)}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="empty">Brak alertów wysłanych na Telegram w tym okresie.</div>';
   }
+  root.querySelectorAll('#al-days button').forEach((b) => {
+    b.onclick = () => {
+      store.set('alDays', +b.dataset.d);
+      root.querySelectorAll('#al-days button').forEach((x) => x.classList.toggle('on', x === b));
+      loadLog();
+    };
+  });
+  const fold = $('#al-fold');
+  fold.open = store.get('alFoldOpen', false);
+  fold.addEventListener('toggle', () => store.set('alFoldOpen', fold.open));
   await loadLog();
   const t = setInterval(loadLog, 30000);
   return () => clearInterval(t);

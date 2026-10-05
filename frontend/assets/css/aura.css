@@ -379,3 +379,26 @@ body.pro .simple-only { display: none !important; }
 .chip input[type="checkbox"] { width: 13px; height: 13px; }
 @media (max-width: 900px) { .mobile-only { display: inline-flex; } }
 a.btn, a.btn:hover { text-decoration: none; }
+
+/* ---------- zwijane sekcje (Alerty → ustawienia) ---------- */
+details.fold { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+details.fold > summary { list-style: none; cursor: pointer; padding: 14px 18px; font-size: 13px; font-weight: 600; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; user-select: none; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--text-2); border-bottom: 1.5px solid var(--text-2); transform: rotate(-45deg); transition: transform .15s; }
+details.fold[open] > summary::before { transform: rotate(45deg); }
+details.fold > summary:hover { color: #fff; }
+details.fold > .fold-body { padding: 0 18px 18px; }
+details.fold > .fold-body > .panel, details.fold > .fold-body .two > .panel, details.fold > .fold-body .stack > .panel { background: var(--surface-2); }
+
+/* ---------- statystyki ---------- */
+.stat-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .stat-cols { grid-template-columns: 1fr; } }
+.bar-mini { height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; margin-top: 6px; }
+.bar-mini > span { display: block; height: 100%; }
+.stat-cols .kpis { grid-template-columns: 1fr 1fr; }
+.stat-cols .kpis .panel.kpi { border-left: 0; padding: 16px 0; }
+.stat-cols .kpis .panel.kpi:nth-child(even) { border-left: 1px solid var(--line); padding-left: 20px; }
+.stat-cols .kpis .panel.kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+.stat-cols .kpis .value { white-space: nowrap; }
+.stat-cols > * { min-width: 0; }
+@media (max-width: 700px) { .stat-cols table.t th, .stat-cols table.t td { padding: 10px 8px; } }

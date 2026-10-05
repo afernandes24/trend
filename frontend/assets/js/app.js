@@ -4,7 +4,7 @@ import * as dashboard from './views/dashboard.js';
 import * as scanner from './views/scanner.js';
 import * as analysis from './views/analysis.js';
 import * as backtest from './views/backtest.js';
-import * as history from './views/history.js';
+import * as stats from './views/stats.js';
 import * as alerts from './views/alerts.js';
 import * as risk from './views/risk.js';
 import * as settings from './views/settings.js';
@@ -18,6 +18,7 @@ const I = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/><path d="M6 6V5a2 2 0 0 1 2-2h8"/>',
+  stats: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
   cog: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
 };
@@ -28,8 +29,8 @@ const ROUTES = [
   { id: 'dashboard', label: 'Rynek', short: 'Rynek', icon: I.grid, mod: dashboard, kicker: 'Przegląd 10 instrumentów' },
   { id: 'positions', label: 'Moje pozycje', short: 'Pozycje', icon: I.wallet, mod: positions, kicker: 'Zysk i strata z alertów' },
   { id: 'analysis', label: 'Wykres', short: 'Wykres', icon: I.chart, mod: analysis, kicker: 'Analiza instrumentu' },
-  { id: 'history', label: 'Sygnały', short: 'Sygnały', icon: I.list, mod: history, kicker: 'Historia alertów' },
-  { id: 'alerts', label: 'Alerty', short: 'Alerty', icon: I.bell, mod: alerts, kicker: 'Powiadomienia Telegram / e-mail / SMS' },
+  { id: 'alerts', label: 'Alerty', short: 'Alerty', icon: I.bell, mod: alerts, kicker: 'Wysłane na Telegram · ustawienia' },
+  { id: 'stats', label: 'Statystyki', short: 'Statyst.', icon: I.stats, mod: stats, kicker: 'Alerty i Twoje transakcje' },
   { id: 'scanner', label: 'Market Scanner', short: 'Skaner', icon: I.radar, mod: scanner, kicker: 'Skanowanie 10 instrumentów', pro: true },
   { id: 'backtest', label: 'Backtesting', short: 'Backtest', icon: I.flask, mod: backtest, kicker: 'Test historyczny strategii', pro: true },
   { id: 'risk', label: 'Kalkulator ryzyka', short: 'Ryzyko', icon: I.shield, mod: risk, kicker: 'Wielkość pozycji', pro: true },
