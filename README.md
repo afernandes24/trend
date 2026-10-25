@@ -5,6 +5,18 @@ Aplikacja webowa do wyszukiwania setupów **trend following** na 10 instrumentac
 Pokazuje Entry / SL / TP, score 0–100, zgodność interwałów, backtest z walk-forward
 i wysyła alerty e-mail/SMS. **Nie składa zleceń** — tryb wyłącznie analityczny.
 
+![Wykres z sygnałem](docs/screenshots/wykres.png)
+
+**W skrócie:** silnik strategii (wskaźniki, scoring 0–100, wielointerwałowa analiza MTF), backtest z walk-forward bez look-ahead, skaner działający 24/7 w tle, alerty na Telegram/e-mail/SMS, dziennik pozycji z wynikiem w PLN i 64 testy automatyczne.
+
+**Stack:** Python · FastAPI · pandas / NumPy · SQLite · JavaScript (ES modules) · TradingView Lightweight Charts · pytest · Docker · Railway
+
+| Rynek | Backtest |
+|---|---|
+| ![Rynek](docs/screenshots/rynek.png) | ![Backtest](docs/screenshots/backtest.png) |
+
+*Zrzuty wykonane na danych syntetycznych – liczby nie są wynikami prawdziwego handlu.*
+
 ## Wdrożenie 24/7 (Railway + Telegram)
 
 Instrukcja krok po kroku: **[DEPLOY.md](DEPLOY.md)**.
@@ -43,7 +55,7 @@ aura-trend/
 │  ├─ notifications/           Notification System (channels: SMTP/Twilio/SMSAPI, dispatcher: filtry + cooldown)
 │  ├─ services/                analiza/skaner/historia sygnałów + pętla w tle
 │  └─ api/routes.py            REST API /api/*
-├─ backend/tests/              32 testy (m.in. brak look-ahead w score i backteście)
+├─ backend/tests/              64 testy (m.in. brak look-ahead w score i backteście)
 ├─ frontend/                   Frontend: HTML + ES modules, bez kroku budowania
 │  └─ assets/{css,js,vendor}   czarny motyw (CSS), widoki, TradingView Lightweight Charts
 └─ data/                       baza SQLite + data/import/ na pliki CSV
