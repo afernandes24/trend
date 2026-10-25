@@ -133,13 +133,31 @@ def test_settings_validation(notifier):
     assert s["risk_pct"] == 50 and s["capital"] == 5000
 
 
-def test_risk_filter(notifier):
-    # US100: SL 130 pkt -> min. lot 0,01 = 104 PLN = 1,04% przy 10 000 PLN -> OK
-    big = {**SIG, "symbol": "US100", "entry": 24850.0, "sl": 24720.0, "tp1": 25045.0, "tp2": 25110.0,
-           "tp3": 25240.0}
+def test_no_risk_filter(notifier):
+    # filtr ryzyka usunięty: alert idzie, w treści jest tylko ostrzeżenie o zbyt dużym ryzyku
+    notifier.save_settings({"capital": 5000})
+    big = {**SIG, "symbol": "US500", "entry": 6500.0, "sl": 6470.0, "tp1": 6545.0, "tp2": 6560.0, "tp3": 6590.0}
     assert notifier.dispatch(big, True)[0]["status"] == "sent"
-    notifier.save_settings({"capital": 5000})            # 0,01 lota = 2,1% > 1% -> pomijamy
-    r = notifier.dispatch({**big, "symbol": "US500"}, True)
-    assert r[0]["status"] == "skipped" and "za duże ryzyko" in r[0]["reason"]
-    notifier.save_settings({"risk_filter": False})
-    assert notifier.dispatch({**big, "symbol": "US500"}, True)[0]["status"] == "sent"
+    assert "za duże" in notifier.telegram.sent[-1]
+
+
+def test_stats_periods_and_score_buckets(db):
+    import time as _t
+    from app.services.stats import alert_stats, period_start, score_bucket, signal_score_stats, trade_stats
+    assert score_bucket(75) == 75 and score_bucket(79) == 75 and score_bucket(84) == 80 and score_bucket(100) == 95
+    now = int(_t.time())
+    rows = [("GOLD", 77, "SL", -1.0), ("GOLD", 78, "TP2", 2.0), ("US100", 86, "TP3", 3.0), ("US100", 88, "TP1", 1.5)]
+    for k, (sym, sc, res, r) in enumerate(rows):
+        sid = db.insert_signal({**SIG, "symbol": sym, "score": sc, "bar_ts": now - 3600 - k, "reasons": [],
+                                "mtf": None, "status": "CLOSED", "result": res, "result_r": r})
+        db.log_alert(signal_id=sid, symbol=sym, direction="LONG", channel="telegram", status="sent")
+    a = alert_stats(db, [1.5, 2, 3], 1.0, since_ts=period_start("week"))
+    b = {x["from"]: x for x in a["by_score"]}
+    assert b[75]["n"] == 2 and b[75]["total"] == 1.0 and b[75]["win_rate"] == 50.0
+    assert b[85]["n"] == 2 and b[85]["total"] == 2.0          # TP3 -> 2R (TP na TP2), TP1 -> 0R
+    gold = next(x for x in a["by_symbol"] if x["symbol"] == "GOLD")
+    assert gold["pct"] == 1.0                                 # +1R przy 1% ryzyka = +1% konta
+    assert len(signal_score_stats(db, [1.5, 2, 3], 1.0)) == 2
+    t = trade_stats([{"status": "CLOSED", "closed_at": now, "pnl_pln": 50.0, "symbol": "GOLD", "direction": "LONG",
+                      "signal_id": 1, "r_multiple": 1.0}], 5000, since_ts=0, scores={1: 82})
+    assert t["by_symbol"][0]["pct"] == 1.0 and t["by_score"][0]["from"] == 80

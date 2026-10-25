@@ -378,16 +378,30 @@ def alerts_sent(request: Request, days: int = Query(30, ge=0, le=3650), limit: i
 
 
 @router.get("/stats")
-def stats(request: Request, days: int = Query(30, ge=0, le=3650)):
-    from ..services.stats import alert_stats, trade_stats
+def stats(request: Request, period: str = "month", days: int | None = None):
+    """Statystyki za okres kalendarzowy: week (od poniedziałku) | month (od 1.) | all."""
+    from ..services.stats import (PERIODS, alert_stats, period_start, signal_score_stats, summary_row,
+                                  trade_stats)
+    if period not in PERIODS:
+        raise HTTPException(400, "period: week | month | all")
     s = _svc(request)
     cfg = s.notifier.get_settings()
-    d = days or None
+    tp_r = list(s.analysis.get_params().tp_r)
+    since = period_start(period)
+    if days:                                              # zgodność wstecz (?days=30)
+        since = int(time.time()) - days * 86400
     closed = [s.positions.enrich(p) for p in s.db.list_positions("CLOSED")]
-    return {"days": days, "capital": cfg["capital"], "risk_pct": cfg["risk_pct"],
-            "tp_r": list(s.analysis.get_params().tp_r),
-            "alerts": alert_stats(s.db, list(s.analysis.get_params().tp_r), cfg["risk_pct"], d),
-            "trades": trade_stats(closed, cfg["capital"], d)}
+    scores = {}
+    for p in closed:
+        if p.get("signal_id") and p["signal_id"] not in scores:
+            sig = s.db.get_signal(p["signal_id"])
+            scores[p["signal_id"]] = sig["score"] if sig else None
+    return {"period": period, "label": PERIODS[period], "since": since,
+            "capital": cfg["capital"], "risk_pct": cfg["risk_pct"], "tp_r": tp_r,
+            "summary": [summary_row(s.db, closed, tp_r, cfg["risk_pct"], cfg["capital"], k) for k in PERIODS],
+            "alerts": alert_stats(s.db, tp_r, cfg["risk_pct"], since_ts=since),
+            "signals_by_score": signal_score_stats(s.db, tp_r, cfg["risk_pct"], since_ts=since),
+            "trades": trade_stats(closed, cfg["capital"], since_ts=since or 0, scores=scores)}
 
 
 @router.get("/alerts/log")

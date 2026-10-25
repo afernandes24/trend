@@ -144,7 +144,6 @@ def test_alert_settings_and_cooldown(client):
         def send(self, *a, **k):
             raise ChannelError("SMTP down")
     notifier.email = Broken()
-    notifier.save_settings({"risk_filter": False})
     res = notifier.dispatch({**sig, "symbol": "SILVER"}, mtf_aligned=True)
     assert any(x["status"] == "failed" for x in res)
 

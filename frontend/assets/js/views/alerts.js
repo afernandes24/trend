@@ -78,7 +78,6 @@ export async function render(root, ctx) {
           <div class="field"><label>Ryzyko / transakcję (%)</label><input type="number" id="al-risk" min="0.1" max="5" step="0.1" value="${s.risk_pct}"></div>
         </div>
         <div class="muted" style="font-size:12px;margin-top:10px">Alert poda liczbę lotów, przy której strata na SL ≈ ryzyko. Wartość punktu zweryfikuj w xStation.</div>
-        <label class="check" style="margin-top:14px"><input type="checkbox" id="al-riskf" ${s.risk_filter ? 'checked' : ''}> Nie wysyłaj alertu, gdy nawet minimalny lot (0,01) przekracza ryzyko</label>
       </div>
       <div class="stack" style="gap:14px">
         <div class="flabel">Filtry alertów</div>
@@ -113,7 +112,7 @@ export async function render(root, ctx) {
       min_score: +(root.querySelector('input[name="al-min"]:checked')?.value ?? s.min_score),
       long: $('#al-long').checked, short: $('#al-short').checked,
       require_mtf: $('#al-mtf').checked, cooldown_minutes: +$('#al-cool').value,
-      capital: +$('#al-cap').value, risk_pct: +$('#al-risk').value, risk_filter: $('#al-riskf').checked,
+      capital: +$('#al-cap').value, risk_pct: +$('#al-risk').value,
       stale_filter: $('#al-stale').checked, stale_r: +$('#al-stale-r').value,
       quiet_enabled: $('#al-quiet').checked, quiet_from: $('#al-qf').value || '23:00', quiet_to: $('#al-qt').value || '07:00',
       news_filter: $('#al-news').checked, news_window_minutes: +$('#al-news-min').value,

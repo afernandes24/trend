@@ -59,11 +59,19 @@ app = FastAPI(title="TREND FOLLOWING — analiza (XTB)", version="1.0.0", lifesp
 app.include_router(router)
 
 
+async def _no_stale_assets(request: Request, call_next):
+    """Przeglądarka zawsze sprawdza, czy JS/CSS się zmienił (po wdrożeniu od razu nowa wersja)."""
+    resp = await call_next(request)
+    if request.url.path.startswith("/assets/") and "/vendor/" not in request.url.path:
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @app.middleware("http")
 async def basic_auth(request: Request, call_next):
     """Logowanie hasłem (APP_USERNAME / APP_PASSWORD). /api/health zostaje otwarte dla healthchecku."""
     if not settings.auth_password or request.url.path == "/api/health":
-        return await call_next(request)
+        return await _no_stale_assets(request, call_next)
     header = request.headers.get("authorization", "")
     if header.startswith("Basic "):
         try:
@@ -72,7 +80,7 @@ async def basic_auth(request: Request, call_next):
             user, pwd = "", ""
         if secrets.compare_digest(user, settings.auth_username or "admin") and \
                 secrets.compare_digest(pwd, settings.auth_password):
-            return await call_next(request)
+            return await _no_stale_assets(request, call_next)
     return Response("Wymagane logowanie", status_code=401,
                     headers={"WWW-Authenticate": 'Basic realm="TREND FOLLOWING", charset="UTF-8"'})
 

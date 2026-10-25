@@ -34,8 +34,6 @@ DEFAULT_ALERT_SETTINGS = {
     # --- wolumen w alercie
     "capital": 10000.0,           # PLN
     "risk_pct": 1.0,              # % kapitału na transakcję
-    # --- nie wysyłaj, gdy nawet minimalny lot przekracza ryzyko
-    "risk_filter": True,
     # --- filtr spóźnionych alertów
     "stale_filter": True,
     "stale_r": 0.5,               # pomiń, jeśli cena odjechała od Entry o więcej niż 0.5R
@@ -208,13 +206,6 @@ class Notifier:
                 if abs(moved) > cfg["stale_r"]:
                     kier = "w stronę TP" if moved > 0 else "w stronę SL"
                     return False, f"cena odjechała od Entry o {abs(moved):.2f}R {kier} (spóźniony alert)"
-        if cfg.get("risk_filter") and sig.get("entry") is not None and sig.get("sl") is not None:
-            ps = position_size(sig, cfg, (self.fx() or {}).get("rates", {}))
-            if ps and ps["real_risk"] > ps["risk_amount"] * 1.1:
-                lots = f"{ps['lots']:.2f}".replace(".", ",")
-                real = f"{ps['real_risk_pct']:.1f}".replace(".", ",")
-                lim = f"{cfg['risk_pct']:g}".replace(".", ",")
-                return False, f"za duże ryzyko: min. lot {lots} = {real}% kapitału (limit {lim}%)"
         if in_quiet_hours(cfg):
             return False, f"ciche godziny ({cfg['quiet_from']}–{cfg['quiet_to']})"
         if cfg["news_filter"] and cfg["news_window_minutes"] > 0:
